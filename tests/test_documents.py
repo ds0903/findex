@@ -3,7 +3,7 @@ import logging
 
 import pytest
 
-from findex.documents import iter_documents, strip_boilerplate
+from findex.documents import extract_title, iter_documents, strip_boilerplate
 
 
 def test_is_generator(tmp_path):
@@ -63,3 +63,23 @@ def test_strip_boilerplate():
     )
     assert strip_boilerplate(raw).strip() == "real text"
     assert strip_boilerplate("no markers here") == "no markers here"
+
+
+def test_extract_title():
+    raw = "The Project Gutenberg eBook of X\n\nTitle: Moby Dick; Or, The Whale  \nAuthor: H. M.\n"
+    assert extract_title(raw) == "Moby Dick; Or, The Whale"
+    assert extract_title("no header", default="fallback") == "fallback"
+
+
+def test_document_has_title_from_header_even_after_strip(tmp_path):
+    (tmp_path / "pg1.txt").write_text(
+        "Title: Some Book\n\n*** START OF THE PROJECT GUTENBERG EBOOK SOME BOOK ***\ntext\n"
+        "*** END OF THE PROJECT GUTENBERG EBOOK SOME BOOK ***\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "plain.txt").write_text("just text", encoding="utf-8")
+
+    docs = {d.doc_id: d for d in iter_documents(tmp_path)}
+    assert docs["pg1.txt"].title == "Some Book"
+    assert docs["pg1.txt"].text.strip() == "text"
+    assert docs["plain.txt"].title == "plain"  # нема Title - беремо ім'я файлу

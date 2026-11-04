@@ -9,6 +9,7 @@ log = logging.getLogger(__name__)
 # маркери початку/кінця самої книги в файлах Gutenberg (решта - ліцензійний текст)
 _START = re.compile(r"^\*\*\* ?START OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*$", re.MULTILINE)
 _END = re.compile(r"^\*\*\* ?END OF (?:THE|THIS) PROJECT GUTENBERG EBOOK.*$", re.MULTILINE)
+_TITLE = re.compile(r"^Title:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +17,13 @@ class Document:
     doc_id: str
     path: Path
     text: str
+    title: str = ""
+
+
+def extract_title(raw: str, default: str = "") -> str:
+    """Бере назву з рядка `Title: ...` у шапці Gutenberg. Якщо його нема - default."""
+    match = _TITLE.search(raw[:5000])
+    return match.group(1) if match else default
 
 
 def strip_boilerplate(text: str) -> str:
@@ -53,6 +61,7 @@ def iter_documents(
         except (OSError, UnicodeDecodeError) as exc:
             log.warning("пропускаю %s: %s", path, exc)
             continue
+        title = extract_title(text, default=path.stem)  # до того як відріжемо шапку
         if strip:
             text = strip_boilerplate(text)
-        yield Document(doc_id=path.relative_to(root).as_posix(), path=path, text=text)
+        yield Document(doc_id=path.relative_to(root).as_posix(), path=path, text=text, title=title)
