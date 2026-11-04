@@ -1,0 +1,33 @@
+[project]
+name = "findex"
+version = "0.1.0"
+description = "Пошукова система на Python (лабораторні курсу), лаба 1: ітератори та корпус"
+readme = "README.md"
+authors = [
+    { name = "Danil", email = "danil.grey15@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+findex = "findex.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

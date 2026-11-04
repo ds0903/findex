@@ -1,0 +1,16 @@
+# корпус не комітимо
+data/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+
+# інструменти
+.pytest_cache/
+.ruff_cache/
+.idea/
+.vscode/
