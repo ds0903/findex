@@ -116,6 +116,11 @@ async def crawl(
         if request.url.netloc.decode("ascii").lower() not in allowed:
             raise OffSiteError(f"редірект на чужий хост {request.url.host}")
 
+    # httpx будує SSL-контекст синхронно (читає ~150 CA-сертифікатів, ≈0.2 с на Windows).
+    # Прямо в корутині це зупинило б цикл подій: asyncio.run(debug=True) це показує.
+    # Тому контекст робимо в потоці, а клієнту віддаємо готовий.
+    verify = await asyncio.to_thread(httpx.create_ssl_context) if transport is None else True
+
     frontier = _Frontier(stats)
     out: asyncio.Queue[object] = asyncio.Queue(maxsize=config.concurrency * 2)
     finished = asyncio.Event()
@@ -124,6 +129,7 @@ async def crawl(
     async with httpx.AsyncClient(
         headers={"User-Agent": config.user_agent},
         timeout=config.fetch.timeout,
+        verify=verify,
         follow_redirects=True,
         max_redirects=5,
         limits=httpx.Limits(max_connections=config.concurrency),
