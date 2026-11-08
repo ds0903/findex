@@ -1,0 +1,122 @@
+[
+ {
+  "name": "1 запит",
+  "concurrency": 1,
+  "per_host": 1,
+  "delay": 0.0,
+  "debug": false,
+  "seconds": 26.183,
+  "all_seconds": [
+   26.179,
+   26.183,
+   26.193
+  ],
+  "pages": 298,
+  "errors": 2,
+  "retries": 1,
+  "pages_per_second": 11.38,
+  "peak_rss_mb": 43.2,
+  "server_max_active": 1,
+  "slow_callbacks": null
+ },
+ {
+  "name": "5 одночасно",
+  "concurrency": 5,
+  "per_host": 5,
+  "delay": 0.0,
+  "debug": false,
+  "seconds": 5.458,
+  "all_seconds": [
+   5.449,
+   5.458,
+   5.465
+  ],
+  "pages": 298,
+  "errors": 2,
+  "retries": 1,
+  "pages_per_second": 54.6,
+  "peak_rss_mb": 43.5,
+  "server_max_active": 5,
+  "slow_callbacks": null
+ },
+ {
+  "name": "20 одночасно",
+  "concurrency": 20,
+  "per_host": 20,
+  "delay": 0.0,
+  "debug": false,
+  "seconds": 1.762,
+  "all_seconds": [
+   1.762,
+   1.762,
+   1.763
+  ],
+  "pages": 298,
+  "errors": 2,
+  "retries": 1,
+  "pages_per_second": 169.15,
+  "peak_rss_mb": 45.1,
+  "server_max_active": 20,
+  "slow_callbacks": null
+ },
+ {
+  "name": "20, але 2 на хост",
+  "concurrency": 20,
+  "per_host": 2,
+  "delay": 0.0,
+  "debug": false,
+  "seconds": 13.19,
+  "all_seconds": [
+   13.182,
+   13.19,
+   13.197
+  ],
+  "pages": 298,
+  "errors": 2,
+  "retries": 1,
+  "pages_per_second": 22.59,
+  "peak_rss_mb": 43.4,
+  "server_max_active": 2,
+  "slow_callbacks": null
+ },
+ {
+  "name": "20, 2 на хост, пауза 0.1 с",
+  "concurrency": 20,
+  "per_host": 2,
+  "delay": 0.1,
+  "debug": false,
+  "seconds": 30.458,
+  "all_seconds": [
+   30.423,
+   30.458,
+   31.033
+  ],
+  "pages": 298,
+  "errors": 2,
+  "retries": 1,
+  "pages_per_second": 9.78,
+  "peak_rss_mb": 43.4,
+  "server_max_active": 2,
+  "slow_callbacks": null
+ },
+ {
+  "name": "20 одночасно, asyncio debug",
+  "concurrency": 20,
+  "per_host": 20,
+  "delay": 0.0,
+  "debug": true,
+  "seconds": 7.828,
+  "all_seconds": [
+   7.572,
+   7.828,
+   7.849
+  ],
+  "pages": 298,
+  "errors": 2,
+  "retries": 1,
+  "pages_per_second": 38.07,
+  "peak_rss_mb": 47.4,
+  "server_max_active": 9,
+  "slow_callbacks": 0
+ }
+]

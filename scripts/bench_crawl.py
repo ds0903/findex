@@ -74,7 +74,9 @@ def one_run(corpus: Path, port: int, max_pages: int, config: tuple, workdir: Pat
         ]
         if debug:
             command.append("--debug")
-        subprocess.run(command, check=True, capture_output=True, cwd=REPO, env=_env())
+        done = subprocess.run(command, capture_output=True, text=True, cwd=REPO, env=_env())
+        if done.returncode != 0:
+            raise RuntimeError(f"findex crawl завершився з кодом {done.returncode}: {done.stderr}")
         result = json.loads(stats_file.read_text(encoding="utf-8"))
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/__stats") as response:
             result["server"] = json.loads(response.read())

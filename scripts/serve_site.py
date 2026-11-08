@@ -120,6 +120,13 @@ class Site:
         return 404, {}, b""
 
 
+class _QuietServer(ThreadingHTTPServer):
+    request_queue_size = 256  # типові 5 мало: при 40 одночасних з'єднаннях Windows відмовляє
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        pass  # краулер обриває з'єднання після таймауту: це очікувано, трасування не потрібне
+
+
 def make_handler(site: Site) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"  # keep-alive, як у справжніх серверів
@@ -168,7 +175,7 @@ def main() -> None:
 
     site = Site(args.corpus, args.parts, args.latency, args.faults)
     pages = 1 + sum(1 + len(chunks) for _, chunks in site.books.values())
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(site))
+    server = _QuietServer(("127.0.0.1", args.port), make_handler(site))
     server.daemon_threads = True
     print(
         f"сайт на http://127.0.0.1:{args.port}/ ({len(site.books)} книг, ~{pages} сторінок)",
