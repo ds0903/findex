@@ -16,7 +16,7 @@ from typing import Literal
 from findex.index import Index
 from findex.query import And, Node, Not, Or, Phrase, Term, parse
 
-type Engine = Literal["merge", "set"]
+Engine = Literal["merge", "set"]  # не `type ...`: typer не розуміє аліаси з PEP 695
 ENGINE_NAMES: tuple[Engine, ...] = ("merge", "set")
 
 type Combine = Callable[[Sequence[int], Sequence[int]], list[int]]
@@ -133,6 +133,6 @@ def search(index: Index, query: str, engine: Engine = "merge") -> list[int]:
 
 if __name__ == "__main__":
     # див. пояснення в index.py: CLI тримаємо в окремому модулі
-    from findex.commands import search_main
+    from findex.cli import app
 
-    sys.exit(search_main())
+    app(["search", *sys.argv[1:]], prog_name="python -m findex.search")

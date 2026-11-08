@@ -24,7 +24,7 @@ from findex.tokenizer import tokenize
 #   slots - list[Posting], dataclass(frozen=True, slots=True)  (основний)
 #   plain - list[PlainPosting], dataclass без slots
 #   array - для кожного терма пара array('I'): doc_ids і tfs, жодних об'єктів
-type Storage = Literal["slots", "plain", "array"]
+Storage = Literal["slots", "plain", "array"]  # не `type ...`: typer не розуміє аліаси з PEP 695
 STORAGES: tuple[Storage, ...] = ("slots", "plain", "array")
 
 
@@ -250,6 +250,6 @@ if __name__ == "__main__":
     # Логіка CLI лежить в окремому модулі, а не тут: якби вона була в цьому файлі, то при
     # запуску через -m усі класи опинилися б у модулі __main__, і pickle потім
     # не зміг би знайти їх при завантаженні індексу з іншої програми.
-    from findex.commands import index_main
+    from findex.cli import app
 
-    sys.exit(index_main())
+    app(["index", *sys.argv[1:]], prog_name="python -m findex.index")

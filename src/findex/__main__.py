@@ -1,5 +1,3 @@
-import sys
+from findex.cli import app
 
-from findex.cli import main
-
-sys.exit(main())
+app()

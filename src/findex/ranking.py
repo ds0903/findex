@@ -12,7 +12,7 @@ from typing import Literal, Protocol
 
 from findex.index import Index, PostingLike
 
-type ScorerName = Literal["bm25", "tfidf"]
+ScorerName = Literal["bm25", "tfidf"]  # не `type ...`: typer не розуміє аліаси з PEP 695
 SCORER_NAMES: tuple[ScorerName, ...] = ("bm25", "tfidf")
 
 

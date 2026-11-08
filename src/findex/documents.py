@@ -37,6 +37,14 @@ def strip_boilerplate(text: str) -> str:
     return text
 
 
+def find_paths(root: Path | str, pattern: str = "*.txt") -> list[Path]:
+    """Відсортований список файлів корпусу (лише шляхи, тексти не читаються)."""
+    root = Path(root)
+    if not root.is_dir():
+        raise FileNotFoundError(f"немає такої теки: {root}")
+    return sorted(p for p in root.rglob(pattern) if p.is_file())
+
+
 def iter_documents(
     root: Path | str, pattern: str = "*.txt", strip: bool = True
 ) -> Iterator[Document]:
@@ -50,12 +58,7 @@ def iter_documents(
     з записом у лог.
     """
     root = Path(root)
-    if not root.is_dir():
-        raise FileNotFoundError(f"немає такої теки: {root}")
-
-    for path in sorted(root.rglob(pattern)):
-        if not path.is_file():
-            continue
+    for path in find_paths(root, pattern):
         try:
             text = path.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeDecodeError) as exc:
