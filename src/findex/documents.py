@@ -60,11 +60,15 @@ def iter_documents(
     root = Path(root)
     for path in find_paths(root, pattern):
         try:
-            text = path.read_text(encoding="utf-8-sig")
+            yield read_document(path, root, strip)
         except (OSError, UnicodeDecodeError) as exc:
             log.warning("пропускаю %s: %s", path, exc)
-            continue
-        title = extract_title(text, default=path.stem)  # до того як відріжемо шапку
-        if strip:
-            text = strip_boilerplate(text)
-        yield Document(doc_id=path.relative_to(root).as_posix(), path=path, text=text, title=title)
+
+
+def read_document(path: Path, root: Path, strip: bool = True) -> Document:
+    """Читає один файл. Кидає OSError або UnicodeDecodeError, якщо файл не читається."""
+    text = path.read_text(encoding="utf-8-sig")
+    title = extract_title(text, default=path.stem)  # до того як відріжемо шапку
+    if strip:
+        text = strip_boilerplate(text)
+    return Document(doc_id=path.relative_to(root).as_posix(), path=path, text=text, title=title)

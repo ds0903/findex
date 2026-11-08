@@ -210,12 +210,14 @@ def build_index(
     storage: Storage = "slots",
     positions: bool = False,
     root: str = "",
+    first_doc_id: int = 0,
 ) -> Index:
     """Будує індекс за один прохід по документах.
 
     documents може бути генератором: тексти не накопичуються, в пам'яті росте
-    лише сам індекс. Документи нумеруються по порядку, тому списки постінгів
-    виходять відсортованими за doc_id самі собою.
+    лише сам індекс. Документи нумеруються по порядку (починаючи з first_doc_id),
+    тому списки постінгів виходять відсортованими за doc_id самі собою.
+    first_doc_id потрібен паралельній побудові: кожен шматок корпусу має свій діапазон id.
     """
     if storage not in STORAGES:
         raise ValueError(f"невідоме сховище {storage!r}, є: {', '.join(STORAGES)}")
@@ -226,7 +228,7 @@ def build_index(
     doc_lengths: dict[int, int] = {}
     doc_meta: dict[int, DocMeta] = {}
 
-    for doc_id, doc in enumerate(documents):
+    for doc_id, doc in enumerate(documents, start=first_doc_id):
         counts: Counter[str] = Counter()
         where: defaultdict[str, list[int]] = defaultdict(list)
         if positions:
