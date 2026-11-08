@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from findex.searcher import Backend
+
 
 class Settings(BaseSettings):
     """Налаштування з оточення (INDEX_PATH=...) і з файлу .env. У коді нічого не зашито.
@@ -16,6 +18,7 @@ class Settings(BaseSettings):
     # якщо корпус лежить не там, де був під час `findex index` (наприклад, у контейнері)
     corpus_root: Path | None = None
     cache_size: int = 256  # запитів у кеші Searcher
+    backend: Backend = "numpy"  # сервер довго живе, тож масиви NumPy будуються один раз
     text_cache: int = 128  # документів, чий текст тримаємо в пам'яті для сніпетів
     log_level: str = "INFO"
 

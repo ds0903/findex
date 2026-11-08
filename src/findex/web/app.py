@@ -34,7 +34,7 @@ def load_state(settings: Settings, state: AppState) -> None:
     if settings.corpus_root is not None:
         index.root = str(settings.corpus_root)
     state.index = index
-    state.searcher = Searcher(index, cache_size=settings.cache_size)
+    state.searcher = Searcher(index, cache_size=settings.cache_size, backend=settings.backend)
 
     @functools.lru_cache(maxsize=settings.text_cache)
     def cached_text(doc_id: int) -> str | None:

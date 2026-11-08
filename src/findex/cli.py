@@ -43,7 +43,7 @@ from findex.measure import mb, measure, peak_rss_mb, setup_console
 from findex.parallel import BuildResult, ExecutorName, build_parallel
 from findex.ranking import ScorerName, make_scorer
 from findex.search import Engine
-from findex.searcher import Searcher
+from findex.searcher import Backend, Searcher
 from findex.snippets import snippet_for
 from findex.stats import Stats, collect_stats, collect_stats_eager
 from findex.store import Format, load, open_index, save
@@ -426,6 +426,9 @@ def search_command(
     k: Annotated[int, typer.Option("--k", "-k", min=1, help="скільки результатів")] = 10,
     scorer: Annotated[ScorerName, typer.Option("--scorer", help="формула рейтингу")] = "bm25",
     engine: Annotated[Engine, typer.Option("--engine", help="булів пошук")] = "merge",
+    backend: Annotated[
+        Backend, typer.Option("--backend", help="рейтинг: python (лаба 3) або numpy (лаба 8)")
+    ] = "python",
     as_json: Annotated[bool, typer.Option("--json", help="JSON lines у stdout")] = False,
     no_snippets: Annotated[bool, typer.Option("--no-snippets", help="без уривків")] = False,
     repeat: Annotated[int, typer.Option("--repeat", min=1, help="N разів (кеш, -vv)")] = 1,
@@ -438,7 +441,7 @@ def search_command(
     rows: list[dict[str, object]] = []
     highlighted: list[Text | None] = []
     with expected_errors(), open_index(index_path) as index:
-        searcher = Searcher(index, engine=engine)
+        searcher = Searcher(index, engine=engine, backend=backend)
         ranking = make_scorer(scorer)
         start = time.perf_counter()
         results = searcher.search(query, ranking, k)
