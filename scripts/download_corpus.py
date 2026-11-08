@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from findex.measure import setup_console
+
 # id книг на gutenberg.org (переважно англійською + кілька іншими мовами для Unicode)
 _ENGLISH = """
 1342 11 84 1661 2701 98 1232 174 345 76 74 1400 2600 1184 135 996 2554 1399 4300
@@ -55,7 +57,7 @@ def title_and_language(path: Path) -> tuple[str, str]:
 
 def main() -> int:
     # консоль windows часто в cp1251, а в назвах книг є é, ö тощо
-    sys.stdout.reconfigure(encoding="utf-8")
+    setup_console()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     total = 0
     for book_id in BOOK_IDS:

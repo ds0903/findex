@@ -11,6 +11,7 @@ from itertools import islice
 from pathlib import Path
 
 from findex.documents import iter_documents
+from findex.measure import setup_console
 from findex.stats import collect_stats, collect_stats_eager, measure
 
 
@@ -26,7 +27,7 @@ def run(root: Path, limit: int | None, eager: bool):
 
 
 def main() -> None:
-    sys.stdout.reconfigure(encoding="utf-8")
+    setup_console()
     root = Path(sys.argv[1])
     limits = [int(x) for x in sys.argv[2:]] or [10, 25, 50, None]
 
@@ -37,9 +38,10 @@ def main() -> None:
             timed, traced = run(root, limit, eager)
             s = traced.stats
             name = "eager" if eager else "lazy"
+            peak = traced.peak_bytes or 0  # с trace_memory=True значення завжди є
             print(
                 f"| {name} | {s.documents} | {s.tokens} | {s.vocabulary} "
-                f"| {traced.peak_bytes / 1024 / 1024:.1f} | {timed.elapsed:.2f} |",
+                f"| {peak / 1024 / 1024:.1f} | {timed.elapsed:.2f} |",
                 flush=True,
             )
 

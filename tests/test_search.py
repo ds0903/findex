@@ -83,7 +83,9 @@ def test_result_is_a_list_not_the_internal_array():
     result = search(index, "cat")
     assert isinstance(result, list)
     result.append(99)
-    assert list(index.postings["cat"][0]) == [0, 2]  # внутрішній масив не зачепило
+    entry = index.postings["cat"]
+    assert isinstance(entry, tuple)  # array-сховище: пара (doc_ids, tfs)
+    assert list(entry[0]) == [0, 2]  # внутрішній масив не зачепило
 
 
 def test_merge_matches_python_sets_on_random_lists():

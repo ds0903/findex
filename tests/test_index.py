@@ -15,11 +15,11 @@ def as_tuples(index: Index) -> dict:
 
 def test_postings_sorted_with_tf(docs):
     index = build_index(docs)
-    assert [(p.doc_id, p.tf) for p in index.postings["the"]] == [(0, 2), (1, 1)]
-    assert [(p.doc_id, p.tf) for p in index.postings["cat"]] == [(0, 1), (2, 1)]
-    assert [(p.doc_id, p.tf) for p in index.postings["a"]] == [(2, 2)]
-    for plist in index.postings.values():
-        ids = [p.doc_id for p in plist]
+    assert [(p.doc_id, p.tf) for p in index["the"]] == [(0, 2), (1, 1)]
+    assert [(p.doc_id, p.tf) for p in index["cat"]] == [(0, 1), (2, 1)]
+    assert [(p.doc_id, p.tf) for p in index["a"]] == [(2, 2)]
+    for term in index:
+        ids = [p.doc_id for p in index[term]]
         assert ids == sorted(ids)
 
 
@@ -51,9 +51,11 @@ def test_all_storages_hold_the_same_data(storage):
 
 
 def test_storage_types():
-    assert isinstance(build_index(make_docs(), "slots").postings["cat"][0], Posting)
-    assert isinstance(build_index(make_docs(), "plain").postings["cat"][0], PlainPosting)
-    ids, tfs = build_index(make_docs(), "array").postings["cat"]
+    assert isinstance(build_index(make_docs(), "slots")["cat"][0], Posting)
+    assert isinstance(build_index(make_docs(), "plain")["cat"][0], PlainPosting)
+    entry = build_index(make_docs(), "array").postings["cat"]
+    assert isinstance(entry, tuple)  # array-сховище: пара масивів (doc_ids, tfs)
+    ids, tfs = entry
     assert list(ids) == [0, 2]
     assert list(tfs) == [1, 1]
     assert ids.typecode == "I"
@@ -62,15 +64,15 @@ def test_storage_types():
 def test_positions(docs):
     index = build_index(docs, positions=True)
     assert index.positions
-    assert [p.positions for p in index.postings["the"]] == [(0, 4), (0,)]
+    assert [p.positions for p in index["the"]] == [(0, 4), (0,)]
     # tf це кількість позицій
-    for plist in index.postings.values():
-        assert all(len(p.positions) == p.tf for p in plist)
+    for term in index:
+        assert all(len(p.positions) == p.tf for p in index[term])
 
 
 def test_without_positions_tuples_are_empty(docs):
     index = build_index(docs)
-    assert all(p.positions == () for plist in index.postings.values() for p in plist)
+    assert all(p.positions == () for term in index for p in index[term])
 
 
 def test_positions_not_supported_for_array(docs):
@@ -80,7 +82,7 @@ def test_positions_not_supported_for_array(docs):
 
 def test_unknown_storage(docs):
     with pytest.raises(ValueError):
-        build_index(docs, storage="nope")
+        build_index(docs, storage="nope")  # type: ignore[arg-type]  # навмисно неправильне значення
 
 
 def test_empty_corpus():
@@ -123,9 +125,9 @@ def test_equal_objects_have_equal_hashes():
 def test_frozen():
     posting = Posting(1, 2)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        posting.tf = 5
+        posting.tf = 5  # type: ignore[misc]  # навмисна спроба змінити frozen-об'єкт
     with pytest.raises(dataclasses.FrozenInstanceError):
-        DocMeta("a", "b").title = "c"
+        DocMeta("a", "b").title = "c"  # type: ignore[misc]  # те саме
 
 
 def test_slots_instances_have_no_dict():
@@ -133,4 +135,4 @@ def test_slots_instances_have_no_dict():
     assert not hasattr(DocMeta("a", "b"), "__dict__")
     assert hasattr(PlainPosting(1, 2), "__dict__")
     with pytest.raises((AttributeError, TypeError)):
-        Posting(1, 2).extra = 1
+        Posting(1, 2).extra = 1  # type: ignore[attr-defined]  # slots не дозволяють нових полів

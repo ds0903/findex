@@ -14,7 +14,7 @@ import pickle
 import struct
 import sys
 from array import array
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,7 +23,7 @@ from typing import Any, Literal, cast
 from findex.index import STORAGES, DocMeta, Entry, Index, PlainPosting, Posting, Storage
 from findex.timing import timed
 
-type Format = Literal["pickle", "binary"]
+Format = Literal["pickle", "binary"]  # не `type ...`: typer не розуміє аліаси з PEP 695
 FORMATS: tuple[Format, ...] = ("pickle", "binary")
 MAGIC = b"FINDEX02"
 
@@ -65,7 +65,7 @@ def load(path: Path | str) -> Index:
 
 
 @contextmanager
-def open_index(path: Path | str) -> Iterator[Index]:
+def open_index(path: Path | str) -> Generator[Index]:
     """with open_index(path) as index: ...
 
     Після виходу з with (і нормального, і через виняток) індекс закривається:
@@ -139,7 +139,7 @@ def _parse_header(raw: bytes, path: Path) -> _Header:
         if storage not in STORAGES:
             raise ValueError(storage)
         return _Header(
-            storage=cast("Storage", storage),
+            storage=storage,  # після перевірки `in STORAGES` pyright знає, що це Storage
             positions=bool(data["positions"]),
             root=str(data.get("root", "")),  # у файлах лаби 2 цього ключа нема
             byteorder=str(data["byteorder"]),

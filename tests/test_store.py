@@ -87,7 +87,7 @@ def test_pickle_with_something_else_inside_is_rejected(tmp_path):
 
 def test_unknown_format(tmp_path):
     with pytest.raises(ValueError):
-        save(build_index(make_docs()), tmp_path / "x", "yaml")
+        save(build_index(make_docs()), tmp_path / "x", "yaml")  # type: ignore[arg-type]  # навмисно
 
 
 def test_missing_file(tmp_path):

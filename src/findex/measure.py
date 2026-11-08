@@ -1,4 +1,5 @@
 import gc
+import io
 import sys
 import time
 import tracemalloc
@@ -39,5 +40,6 @@ def mb(n_bytes: float) -> float:
 
 def setup_console() -> None:
     # у windows консоль часто cp1251, а в корпусі є будь-які символи
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8")

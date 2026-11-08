@@ -42,12 +42,13 @@ class Node:
         raise NotImplementedError
 
     def __and__(self, other: Node) -> And:
-        if not isinstance(other, Node):
+        # перевірка потрібна в runtime (`a & 5` має дати TypeError), хоч за анотацією other це Node
+        if not isinstance(other, Node):  # pyright: ignore[reportUnnecessaryIsInstance]
             return NotImplemented
         return And(self, other)
 
     def __or__(self, other: Node) -> Or:
-        if not isinstance(other, Node):
+        if not isinstance(other, Node):  # pyright: ignore[reportUnnecessaryIsInstance]
             return NotImplemented
         return Or(self, other)
 

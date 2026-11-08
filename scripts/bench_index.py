@@ -62,6 +62,7 @@ def main() -> None:
     rows = []
     save_rows = []
     parts = {}
+    n_post = n_terms = 0
     for storage in STORAGES:
         print(f"[{storage}] build з tracemalloc...", file=sys.stderr, flush=True)
         index, retained, peak = traced_build(root, storage)
@@ -98,7 +99,7 @@ def main() -> None:
         else:
             lists = sum(sys.getsizeof(e) for e in entries)
             first = entries[0][0]
-            big_tf = sum(1 for e in entries for p in e if p.tf > 256)
+            big_tf = sum(1 for t in index for p in index.iter_postings(t) if p.tf > 256)
             parts[storage] = (n_terms, n_post, base, lists, sys.getsizeof(first), big_tf)
         del index, entries
         gc.collect()
