@@ -1,5 +1,7 @@
 # findex
 
+[![ci](https://github.com/ds0903/findex/actions/workflows/ci.yml/badge.svg)](https://github.com/ds0903/findex/actions/workflows/ci.yml)
+
 Пошукова система, яку я пишу по лабораторних з Python. Кожна лаба закінчується тегом
 (`lab-01`, `lab-02`, ...).
 
@@ -9,6 +11,9 @@
   [Лаба 2](#лаба-2-інвертований-індекс) нижче.
 - **Лаба 3** (тег `lab-03`) — клас `Index`, ранжування (TF-IDF і BM25), парсер мови запитів
   з дужками й фразами, кеш, сніпети. Розділ [Лаба 3](#лаба-3-ранжування-і-мова-запитів).
+- **Лаба 4** (тег `lab-04`, реліз [v0.4.0](https://github.com/ds0903/findex/releases/tag/v0.4.0)) —
+  типи (pyright strict), тести (pytest, Hypothesis, покриття), CLI на typer + rich, пакет із wheel,
+  CI. Розділ [Лаба 4](#лаба-4-типи-тести-cli-і-пакування).
 
 Що є з лаби 1:
 
@@ -58,11 +63,10 @@ src/findex/
     documents.py   Document, iter_documents()
     tokenizer.py   tokenize()
     stats.py       collect_stats(), collect_stats_eager(), measure()     (лаба 1)
-    cli.py         команда `findex stats`                                (лаба 1)
+    cli.py         команди `findex index / search / stats` (typer, rich) (лаба 1, 4)
     index.py       Posting, DocMeta, Index, build_index()                (лаба 2)
     search.py      булів пошук: merge і set                              (лаба 2)
     store.py       save() / load(): pickle і binary                      (лаба 2)
-    commands.py    CLI для python -m findex.index / findex.search        (лаба 2, 3)
     measure.py     час і пік пам'яті (tracemalloc)                       (лаба 2)
     query.py       парсер запитів, вузли Term/Phrase/And/Or/Not          (лаба 3)
     ranking.py     Scorer, TfIdf, BM25, SearchResult, top_k              (лаба 3)
@@ -596,7 +600,7 @@ parse('python AND (async OR await) NOT java "event loop"') == And(
     And(And(Term("python"), Or(Term("async"), Term("await"))), Not(Term("java"))),
     Phrase(("event", "loop")),
 )
-parse("a OR b c") == Or(a, And(b, c))      # а не And(Or(a, b), c)
+parse("a OR b c") == Or(a, And(b, c))  # а не And(Or(a, b), c)
 ```
 
 Погані запити (`(a`, `a)`, `"a b`, `OR`, порожній) дають `QueryError` із поясненням, що не так.
@@ -692,3 +696,193 @@ scorer-и повертають одну й ту саму малу множину
 `Index` як контейнер і `open_index` з винятком усередині `with`, обидва scorer-и (значення за
 формулою, насичення, довжина), `SearchResult` і `top_k`, кеш (hit у логах), `@timed`, сніпети, CLI
 з дужками й фразою.
+## Лаба 4. Типи, тести, CLI і пакування
+
+Від цієї лаби `findex` це справжній пакет із командою `findex`, а не набір модулів.
+
+### Встановлення і запуск
+
+```
+uv tool install .                 # з клона репозиторію; команда `findex` з'являється в PATH
+findex --version
+
+findex index data/gutenberg --out data/index_pos.bin --positions
+findex search data/index_pos.bin "\"white whale\" AND (harpoon OR ship) NOT darcy"
+findex search data/index_pos.bin "harpoon OR \"sperm whale\"" --k 2 --json
+findex stats data/index_pos.bin --top 5          # файл індексу: статистика індексу
+findex stats data/gutenberg --no-memory          # тека: статистика корпусу (лаба 1)
+```
+
+Або без встановлення: `uv run findex ...`. Колеса `findex-0.4.0-py3-none-any.whl` прикріплено до
+[релізу v0.4.0](https://github.com/ds0903/findex/releases/tag/v0.4.0): `uv tool install findex-0.4.0-py3-none-any.whl`.
+Старі виклики `python -m findex.index ...` і `python -m findex.search ...` теж працюють (тонкі
+обгортки над тими самими командами; опції `--no-memory` у `search` більше нема, пам'ять тепер
+міряє лише `index`).
+
+| команда | що робить |
+|---|---|
+| `findex index ROOT --out FILE` | будує індекс; `--positions`, `--storage {slots,plain,array}`, `--format {binary,pickle}`, `--limit N`, `--no-memory`; смужка прогресу (rich) у stderr |
+| `findex search INDEX QUERY` | ранжований пошук; `--k 10`, `--scorer {bm25,tfidf}`, `--engine {merge,set}`, `--no-snippets`, `--repeat N`, `--json` |
+| `findex stats PATH` | теку: документи/токени/словник/топ-термів (лаба 1); файл індексу: документи, терми, постінги, середня довжина, топ-термів за кількістю документів |
+
+Загальні опції: `-v` (INFO) і `-vv` (DEBUG) для кожної команди, `--version`, `--help`.
+
+**stdout і stderr розділені.** Усе, що є результатом (таблиця, JSON, підсумок), іде в stdout; логи
+і смужка прогресу — в stderr. Тому `findex search ... --json | jq` працює, навіть з `-vv`.
+
+Таблиця (rich), `findex search data/index_pos.bin "\"white whale\" AND (harpoon OR ship) NOT darcy" -k 3`
+(у стисненому 80-колонковому виводі; у широкому терміналі таблиця ширша, терми в уривку підсвічені жирним жовтим):
+
+```
+знайдено документів: 1, показано: 1
+┌───┬─────────┬────────────────────────┬────────────┬─────────────────────────┐
+│ # │ рейтинг │ назва                  │ файл       │ уривок                  │
+├───┼─────────┼────────────────────────┼────────────┼─────────────────────────┤
+│ 1 │  12.566 │ Moby Dick; Or, The     │ pg2701.txt │ … were tossed           │
+│   │         │ Whale                  │            │ helter-skelter into the │
+│   │         │                        │            │ white curdling cream of │
+│   │         │                        │            │ the squall. Squall,     │
+│   │         │                        │            │ whale, and harpoon had  │
+│   │         │                        │            │ all blended together;   │
+│   │         │                        │            │ and the whale, merely   │
+│   │         │                        │            │ grazed by the iron …    │
+└───┴─────────┴────────────────────────┴────────────┴─────────────────────────┘
+```
+
+`--json` — один JSON-об'єкт на рядок (JSON lines), нічого зайвого в stdout; у `snippet` терми
+обгорнуті в `**`, `null` з `--no-snippets`:
+
+```
+$ findex search data/index_pos.bin 'harpoon OR "sperm whale"' --k 2 --json
+{"rank": 1, "doc_id": 32, "score": 17.8961, "title": "Moby Dick; Or, The Whale", "path": "pg2701.txt", "snippet": "… the first among mankind to **harpoon** with civilized steel the great **Sperm** **Whale**; and that …"}
+{"rank": 2, "doc_id": 40, "score": 6.6902, "title": "Ulysses", "path": "pg4300.txt", "snippet": "… **Whale** with a **harpoon** hairpin, alligator tickle the small of his back and …"}
+```
+
+### Помилки і логування
+
+Очікувані помилки — немає файлу чи теки, порожня тека, поганий запит, пошкоджений або чужий файл
+індексу, нема права писати — це **один рядок у stderr і код виходу 1**, без traceback:
+
+```
+$ findex search data/index_pos.bin "(whale"
+помилка: немає закривної дужки для дужки на позиції 0
+$ echo $?
+1
+```
+
+Неправильні значення опцій (`--scorer magic`, `--k 0`, `--storage nope`) відхиляє сам typer з кодом 2
+і поясненням, які значення можливі: для цього `scorer`, `engine`, `storage` і `format`
+описані як `Literal`. Справжні баги (виняток, якого я не чекав) падають із traceback, і це правильно:
+у `locals` traceback не показується (`pretty_exceptions_show_locals=False`), бо там лежав би весь індекс.
+
+Логування налаштовується один раз, у `cli.py`, на початку кожної команди (`setup_logging(verbose)`
+з `logconfig.py`): обробник у stderr, рівень `WARNING` / `-v` INFO / `-vv` DEBUG. Бібліотечні
+модулі лише пишуть у `logging.getLogger(__name__)` і ліниво форматують (`log.debug("кеш: %r", query)`,
+без f-рядків). Обробник має ім'я `findex-cli`, тому повторний виклик замінює свій, а не додає
+другий (важливо в тестах, де CLI викликається десятки разів в одному процесі).
+
+### Типи
+
+`uv run pyright` — **0 помилок**, режим `strict` на всьому `src/`. Скрипти (бенчмарки) і тести
+перевіряються в звичайному режимі: у strict вони дали б сотні скарг на неанотовані фікстури
+й одноразові скрипти, а користі від цього мало.
+
+Що знайшов strict у вже написаному коді (все виправлено):
+
+- `sys.stdout.reconfigure(...)`: у `TextIO` такого методу нема; тепер `isinstance(stream, io.TextIOWrapper)`;
+- змінні, що можуть бути не визначені після циклу (`results` при `--repeat 0`, `n_post` у бенчмарку);
+- `@contextmanager` з анотацією `Iterator[Index]` (застаріло, тепер `Generator[Index]`);
+- зайвий `cast`, доступ до `.tf` у `array`-сховищі в тестах (тести тепер ходять через `index[term]`).
+
+Структурна типізація: `Scorer` це `typing.Protocol` (`TfIdf` і `BM25` його не наслідують, є тест),
+`PostingLike` — Protocol для `Posting` і `PlainPosting`. Режими — `Literal`: `Storage`, `Format`,
+`ScorerName`, `Engine`. Їх оголошено звичайним присвоєнням (`Storage = Literal[...]`), а не `type Storage = ...`:
+typer не розуміє аліасів із PEP 695 (`RuntimeError: Type not yet supported`), я на цьому спіткнувся.
+
+Усі винятки з перевірки типів (кожен із коментарем, чому):
+
+| де | що | чому |
+|---|---|---|
+| `query.py`, `Node.__and__` / `__or__` | `# pyright: ignore[reportUnnecessaryIsInstance]` | за анотацією `other` це `Node`, але в runtime `a & 5` має дати `TypeError` (через `NotImplemented`), тож перевірка потрібна |
+| `test_index.py` (4) | `# type: ignore[arg-type/misc/attr-defined]` | тест навмисно передає поганий `storage`, змінює `frozen`-dataclass і додає поле до `slots`-класу |
+| `test_search.py`, `test_ranking.py`, `test_store.py` | `# type: ignore[arg-type]` | навмисно поганий `engine`, `scorer`, `format` |
+| `test_query.py` (2) | `# type: ignore[misc]`, `[operator]` | змінюємо `frozen`-вузол; `a & 5` |
+
+### Тести
+
+`uv run pytest` — **433 тести**, з них 2 позначені `slow`. Без них (`pytest -m "not slow"`)
+набір біжить ≈3 с, з ними і з покриттям ≈9 с.
+
+- `conftest.py`: фікстури `docs` (три маленькі документи), `corpus` (тека з двома «книгами»
+  у форматі Gutenberg на диску), автоматичне відновлення кореневого логера після кожного тесту,
+  профіль Hypothesis без `deadline`;
+- `parametrize`: токенізатор (включно з Unicode: `ß`, `é` у двох формах запису, типографський апостроф),
+  парсер (дерево запиту порівнюється з очікуваним деревом, а не рядком), обидва `engine` x обидва
+  `scorer`, формати й сховища, поганий запит;
+- три перевірки рейтингу з лаби 3 для **обох** scorer-ів (`test_ranking.py`): 1. рідкий терм вище
+  за частий (TF-IDF і BM25); 2. двадцяте повторення майже нічого не додає (BM25: менше 5% приросту
+  другого повторення; TF-IDF теж насичується, але повільніше, це теж перевіряється); 3. короткий документ
+  вище за довгий — для BM25 так, для TF-IDF рейтинги **рівні**, і тест фіксує саме це (формула без
+  нормалізації довжини);
+- збереження/завантаження: round trip у двох форматах, обрізані й пошкоджені файли, Unicode;
+- CLI через `typer.testing.CliRunner` (`test_cli.py`, 42 тести): `index` → `search` → `stats`,
+  `--json` (кожен рядок парситься, у stdout нічого зайвого, логи в stderr), коди виходу, відсутність
+  traceback у помилках, `-v`/`-vv`, відхилення поганих опцій.
+
+**Hypothesis** (`test_properties.py`), 10 властивостей:
+
+| властивість | перевіряє |
+|---|---|
+| `tokenize` не падає, токени непорожні, у нижньому регістрі, без `'`/`-` по краях | будь-який `st.text()` |
+| токени, склеєні пробілами й розібрані знову, дають ті самі токени | ідемпотентність |
+| `merge_and/or/diff` = `set_and/or/diff` = операції над множинами | випадкові відсортовані списки |
+| те саме на списках до 3000 елементів (`slow`) | |
+| `save` → `load` дає рівний індекс (`slow`) | усі сховища x позиції x обидва формати x Unicode-слова |
+| `parse(str(дерево)) == дерево` | випадкові дерева `And/Or/Not/Term/Phrase` |
+| рівні дерева мають рівні хеші | контракт `hash`/`eq` |
+| BM25 не спадає з `tf` і ніколи не досягає стелі `idf * (k1 + 1)` | будь-який `tf` і документ |
+| жоден scorer не повертає від'ємного числа | |
+| `top_k(k)` = перші `k` елементів `sorted(...)` | випадкові словники рейтингів |
+
+Hypothesis не знайшов у цей раз жодної помилки (властивості пройшли з першого запуску).
+Чесно: ці властивості я писав після коду, тож вони підтверджують, що код тримається, а не допомогли
+його спроєктувати.
+
+**Покриття** (`uv run pytest --cov`, з розгалуженнями): **98%** (1081 рядок, 15 не покрито, 276 гілок).
+
+Не покрито навмисно (і чому):
+
+- `__main__.py` (2 оператори): `python -m findex` — це лише `app()`, поведінку команд перевіряє `test_cli.py`;
+- `cli.py`: гілка `--version`, коли пакет не встановлено (`PackageNotFoundError`);
+- `query.py`: тіла `Node.evaluate` / `Node.terms` з `raise NotImplementedError` (абстрактний базовий
+  клас) і гілка `case _` у `search.py` — недосяжні без підкласу, якого в коді нема;
+- `store.py`: кілька гілок пошкоджених файлів (наприклад, обрізаний заголовок певного вигляду):
+  основні випадки пошкодження покриті, повне дерево всіх можливих пошкоджень — ні.
+
+### Пакування
+
+`pyproject.toml`: метадані (опис, автор, `keywords`, `classifiers`, `urls`), залежності
+(`typer`, `rich`), група `dev` (`pytest`, `pytest-cov`, `hypothesis`, `pyright`, `ruff`),
+`[project.scripts] findex = "findex.cli:app"`, збирання через `uv_build`, `py.typed` у пакеті.
+`uv.lock` у репозиторії: усі отримують ті самі версії.
+
+```
+uv build                                   # dist/findex-0.4.0-py3-none-any.whl + .tar.gz
+```
+
+У колесі (48 КБ) лише код пакета (`findex/*.py`, `py.typed`) і метадані, тестів і корпусу в ньому нема.
+Перевірено на чистому середовищі, поза репозиторієм: новий venv, `uv pip install findex-0.4.0-py3-none-any.whl`
+ставить сам `findex` і 8 залежностей (typer, rich та їхні), `findex --help`, `findex --version` (`findex 0.4.0`),
+`findex index` → `findex search --json` на двох книгах працюють. `uv tool install .` теж перевірено
+(в окрему теку інструментів, щоб не чіпати систему).
+
+### CI
+
+`.github/workflows/ci.yml` на кожен push і pull request: `uv sync --locked`, `ruff check`,
+`ruff format --check`, `pyright`, `pytest`. Бейдж угорі README показує стан останнього запуску.
+Локально те саме: `uv run ruff check && uv run ruff format --check && uv run pyright && uv run pytest`.
+
+### Реліз
+
+Тег `v0.4.0` і [GitHub Release](https://github.com/ds0903/findex/releases/tag/v0.4.0) із колесом
+`findex-0.4.0-py3-none-any.whl` (і `.tar.gz`). Тег `lab-04` вказує на той самий коміт.
