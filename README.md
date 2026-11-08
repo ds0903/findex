@@ -12,6 +12,8 @@
 | GIF пошуку | **ще не записано** |
 | Відео на 2-3 хв | **ще не записано** |
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/ds0903/findex)
+
 ### Три головні числа
 
 | | |
