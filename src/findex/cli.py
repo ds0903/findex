@@ -353,6 +353,69 @@ def crawl_command(
             typer.echo(f"  {message}", err=True)
 
 
+# --- findex serve ---
+
+
+@app.command("serve")
+def serve_command(
+    index_path: Annotated[
+        Path | None,
+        typer.Option("--index", "-i", help="файл індексу (інакше змінна INDEX_PATH)"),
+    ] = None,
+    host: Annotated[str, typer.Option("--host", help="на якій адресі слухати")] = "127.0.0.1",
+    port: Annotated[
+        int | None,
+        typer.Option(
+            "--port", "-p", min=1, max=65535, help="порт (інакше змінна PORT, потім 8000)"
+        ),
+    ] = None,
+    workers: Annotated[
+        int | None,
+        typer.Option(
+            "--workers", "-w", min=1, help="процесів uvicorn (інакше WEB_CONCURRENCY, потім 1)"
+        ),
+    ] = None,
+    corpus_root: Annotated[
+        Path | None, typer.Option("--corpus-root", help="де лежать тексти (інакше CORPUS_ROOT)")
+    ] = None,
+    verbose: Verbose = 0,
+) -> None:
+    """Піднімає веб-сервіс: JSON API (/search, /docs/{id}, /stats, /health) і сторінку пошуку (/).
+
+    Налаштування беруться зі змінних оточення (INDEX_PATH, CORPUS_ROOT, PORT, LOG_LEVEL) і
+    з файлу .env; параметри команди їх перекривають. Кожен воркер це окремий процес, який
+    завантажує індекс сам: пам'ять множиться на кількість воркерів.
+    """
+    import uvicorn
+
+    setup_console()
+    setup_logging(verbose)
+    # воркери uvicorn стартують окремими процесами і читають Settings із оточення
+    if index_path is not None:
+        os.environ["INDEX_PATH"] = str(index_path.resolve())
+    if corpus_root is not None:
+        os.environ["CORPUS_ROOT"] = str(corpus_root.resolve())
+    if verbose:
+        os.environ["LOG_LEVEL"] = "DEBUG" if verbose > 1 else "INFO"
+    with expected_errors():  # PORT=abc у оточенні це помилка користувача, не баг
+        chosen_port = port if port is not None else int(os.environ.get("PORT", "8000"))
+        chosen_workers = (
+            workers if workers is not None else int(os.environ.get("WEB_CONCURRENCY", "1"))
+        )
+        if chosen_workers < 1:
+            raise ValueError("кількість воркерів має бути не менша за 1")
+    log.info("сервіс на http://%s:%d, воркерів: %d", host, chosen_port, chosen_workers)
+    uvicorn.run(
+        "findex.web.app:create_app",
+        factory=True,
+        host=host,
+        port=chosen_port,
+        workers=chosen_workers,
+        log_level="info" if verbose else "warning",
+        access_log=False,  # рядок про запит пише власне middleware, разом з id запиту
+    )
+
+
 # --- findex search ---
 
 
