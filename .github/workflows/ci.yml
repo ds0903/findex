@@ -14,4 +14,9 @@ jobs:
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run pyright
-      - run: uv run pytest
+      - run: uv run pytest --benchmark-skip
+      - run: uv run pytest tests/test_benchmarks.py --benchmark-only --benchmark-json=bench.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark
+          path: bench.json
