@@ -1,7 +1,7 @@
 [project]
 name = "findex"
-version = "0.4.0"
-description = "Пошукова система на Python: інвертований індекс, BM25, мова запитів, CLI"
+version = "0.6.0"
+description = "Пошукова система на Python: інвертований індекс, BM25, мова запитів, CLI, краулер"
 readme = "README.md"
 authors = [
     { name = "Danil", email = "danil.grey15@gmail.com" }
