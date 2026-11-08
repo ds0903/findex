@@ -34,7 +34,7 @@ CONCURRENCY = 20
 ROUNDS = 4  # один запит це 0.4-1.3 с процесора (в основному сніпети), тож раунд триває секунд 15
 
 
-def serve(index: Path, corpus: Path, port: int) -> None:
+def serve(index: Path, corpus: Path, port: int, cache_size: int = 0) -> None:
     import uvicorn
     from fastapi import FastAPI, Request
 
@@ -42,23 +42,24 @@ def serve(index: Path, corpus: Path, port: int) -> None:
     from findex.web.service import run_search
     from findex.web.settings import Settings
 
-    app: FastAPI = create_app(Settings(index_path=index, corpus_root=corpus, cache_size=0))
+    settings = Settings(index_path=index, corpus_root=corpus, cache_size=cache_size)
+    app: FastAPI = create_app(settings)
 
-    def work(request: Request, q: str):
+    def work(request: Request, q: str, k: int):
         state = request.app.state.findex
-        return run_search(state.index, state.searcher, state.text_of, q, 10, "bm25", 1)
+        return run_search(state.index, state.searcher, state.text_of, q, k, "bm25", 1)
 
     @app.get("/search_def")
-    def search_def(request: Request, q: str):
-        return work(request, q)
+    def search_def(request: Request, q: str, k: int = 10):
+        return work(request, q, k)
 
     @app.get("/search_async")
-    async def search_async(request: Request, q: str):
-        return work(request, q)  # синхронна робота прямо в циклі подій
+    async def search_async(request: Request, q: str, k: int = 10):
+        return work(request, q, k)  # синхронна робота прямо в циклі подій
 
     @app.get("/search_thread")
-    async def search_thread(request: Request, q: str):
-        return await asyncio.to_thread(work, request, q)
+    async def search_thread(request: Request, q: str, k: int = 10):
+        return await asyncio.to_thread(work, request, q, k)
 
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="error", access_log=False)
 
@@ -135,10 +136,11 @@ def main() -> None:
     parser.add_argument("--out", type=Path)
     parser.add_argument("--port", type=int, default=8123)
     parser.add_argument("--serve", action="store_true", help="службовий режим: лише сервер")
+    parser.add_argument("--cache", type=int, default=0, help="розмір кешу запитів у режимі --serve")
     args = parser.parse_args()
 
     if args.serve:
-        serve(args.index, args.corpus, args.port)
+        serve(args.index, args.corpus, args.port, args.cache)
         return
 
     env = dict(os.environ, PYTHONIOENCODING="utf-8")

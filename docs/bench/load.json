@@ -1,0 +1,38 @@
+[
+ {
+  "requests": 257,
+  "errors": 0,
+  "seconds": 33.0,
+  "rps": 7.79,
+  "p50_ms": 5458.1,
+  "p95_ms": 5732.6,
+  "p99_ms": 5747.5,
+  "url": "http://127.0.0.1:8221/search_async?q=whale&k=5",
+  "concurrency": 50,
+  "name": "1 воркер, async def"
+ },
+ {
+  "requests": 392,
+  "errors": 0,
+  "seconds": 32.3,
+  "rps": 12.14,
+  "p50_ms": 3662.4,
+  "p95_ms": 4133.4,
+  "p99_ms": 4228.1,
+  "url": "http://127.0.0.1:8222/search?q=whale&k=5",
+  "concurrency": 50,
+  "name": "1 воркер, def"
+ },
+ {
+  "requests": 1653,
+  "errors": 0,
+  "seconds": 30.7,
+  "rps": 53.93,
+  "p50_ms": 569.8,
+  "p95_ms": 1826.4,
+  "p99_ms": 2013.7,
+  "url": "http://127.0.0.1:8223/search?q=whale&k=5",
+  "concurrency": 50,
+  "name": "4 воркери, def"
+ }
+]
