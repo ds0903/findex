@@ -33,8 +33,50 @@ class Snippet:
         return "".join(out)
 
 
+# символи, які re.IGNORECASE вважає тим самим, що й ASCII-літера (K, ſ, İ, ı): для текстів
+# з ними швидкий шлях не годиться, бо str.lower() їх з літерами не зіставляє
+_FOLDS_TO_ASCII = "Kſİı"
+
+
+def _is_word_char(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"  # те саме, що \w у re
+
+
 def _find_matches(text: str, terms: Collection[str]) -> list[tuple[int, int, str]]:
-    """(початок, кінець, терм) усіх входжень термів у тексті, за зростанням початку."""
+    """(початок, кінець, терм) усіх входжень термів у тексті, за зростанням початку.
+
+    Профіль лаби 8: майже весь час пошуку йшов у регулярному виразі з (?<!\\w) на кожній позиції
+    книги на ≈1.5 млн символів. Швидкий шлях шукає самі літерали в тексті з малими літерами (рушій
+    `re` тоді має префільтр) і перевіряє межі слів вручну; результат той самий (є тест).
+    Для термів з дефісом чи апострофом і для екзотичних символів лишається старий вираз.
+    """
+    if not terms:
+        return []
+    simple = all(t.isascii() and t.isalnum() for t in terms)
+    if simple and not any(ch in text for ch in _FOLDS_TO_ASCII):
+        lowered = text.lower()
+        if len(lowered) == len(text):
+            return _find_literals(text, lowered, terms)
+    return _find_with_regex(text, terms)
+
+
+def _find_literals(text: str, lowered: str, terms: Collection[str]) -> list[tuple[int, int, str]]:
+    pattern = re.compile("|".join(re.escape(t) for t in sorted(terms, key=len, reverse=True)))
+    found: list[tuple[int, int, str]] = []
+    for m in pattern.finditer(lowered):
+        start, end = m.span()
+        if (start and _is_word_char(text[start - 1])) or (
+            end < len(text) and _is_word_char(text[end])
+        ):
+            continue
+        term = term_of(text[start:end])
+        if term in terms:
+            found.append((start, end, term))
+    return found
+
+
+def _find_with_regex(text: str, terms: Collection[str]) -> list[tuple[int, int, str]]:
+    """Повільний, але універсальний варіант: один вираз із межами слів."""
     pattern = re.compile(
         r"(?<!\w)(?:"
         + "|".join(re.escape(t) for t in sorted(terms, key=len, reverse=True))
