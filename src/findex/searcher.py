@@ -2,15 +2,19 @@
 
 import functools
 import logging
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from findex.index import Index
 from findex.query import Node, parse
-from findex.ranking import BM25, Scorer, SearchResult, score_documents, top_k
+from findex.ranking import BM25, Scorer, SearchResult, TfIdf, score_documents, top_k
 from findex.search import Engine, evaluate_ids
 from findex.timing import timed
+from findex.vectorized import NumpyIndex, top_k_numpy
 
 log = logging.getLogger(__name__)
+
+Backend = Literal["python", "numpy"]  # не `type ...`: typer не розуміє аліаси з PEP 695
+BACKEND_NAMES: tuple[Backend, ...] = ("python", "numpy")
 
 
 class Matched(NamedTuple):
@@ -26,9 +30,20 @@ class Searcher:
     (змінний об'єкт з порівнянням за значенням) нехешований, і не повинен бути хешованим.
     """
 
-    def __init__(self, index: Index, engine: Engine = "merge", cache_size: int = 256) -> None:
+    def __init__(
+        self,
+        index: Index,
+        engine: Engine = "merge",
+        cache_size: int = 256,
+        backend: Backend = "python",
+    ) -> None:
+        if backend not in BACKEND_NAMES:
+            raise ValueError(f"невідомий backend {backend!r}, є: {', '.join(BACKEND_NAMES)}")
         self.index = index
         self.engine: Engine = engine
+        self.backend: Backend = backend
+        # масиви NumPy будуються один раз при створенні: це кілька секунд на весь корпус
+        self._numpy = NumpyIndex.from_index(index) if backend == "numpy" else None
         self._match = functools.lru_cache(maxsize=cache_size)(self._match_uncached)
 
     def _match_uncached(self, query: str) -> Matched:
@@ -55,7 +70,11 @@ class Searcher:
         if self._match.cache_info().hits > hits_before:
             log.debug("cache hit: %r", query)
 
-        scores = score_documents(self.index, matched.node.terms(), matched.doc_ids, scorer)
+        terms = matched.node.terms()
+        # власний scorer користувача (Protocol) NumPy не знає: для нього лишається Python-шлях
+        if self._numpy is not None and isinstance(scorer, BM25 | TfIdf):
+            return top_k_numpy(self._numpy, terms, matched.doc_ids, scorer, k)
+        scores = score_documents(self.index, terms, matched.doc_ids, scorer)
         return top_k(self.index, scores, k)
 
 
