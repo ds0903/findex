@@ -1,7 +1,7 @@
 [project]
 name = "findex"
-version = "0.6.0"
-description = "Пошукова система на Python: інвертований індекс, BM25, мова запитів, CLI, краулер"
+version = "0.7.0"
+description = "Пошукова система на Python: індекс, BM25, мова запитів, CLI, краулер, веб-API"
 readme = "README.md"
 authors = [
     { name = "Danil", email = "danil.grey15@gmail.com" }
@@ -18,9 +18,13 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.115",
     "httpx>=0.28",
+    "jinja2>=3.1",
+    "pydantic-settings>=2.5",
     "rich>=15.0.0",
     "typer>=0.28.0",
+    "uvicorn>=0.30",
 ]
 
 [project.urls]
