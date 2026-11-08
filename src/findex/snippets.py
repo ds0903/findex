@@ -1,5 +1,6 @@
 """Сніпети: уривок тексту навколо найкращого збігу, з виділеними термами."""
 
+import json
 import logging
 import re
 import unicodedata
@@ -99,12 +100,30 @@ def make_snippet(text: str, terms: Collection[str], width: int = 80) -> Snippet 
 
 def document_text(index: Index, doc_id: int) -> str | None:
     """Текст документа з диска (індекс зберігає лише шлях). None, якщо файл не прочитався."""
-    path = Path(index.root) / index.doc_meta[doc_id].path
+    meta_path = index.doc_meta[doc_id].path
+    if Path(index.root).suffix == ".jsonl":  # сторінка краулера: шлях це url у .jsonl
+        return _text_from_jsonl(Path(index.root), meta_path)
+    path = Path(index.root) / meta_path
     try:
         return strip_boilerplate(path.read_text(encoding="utf-8-sig"))
     except OSError as exc:
         log.warning("не можу прочитати %s для сніпета: %s", path, exc)
         return None
+
+
+def _text_from_jsonl(path: Path, url: str) -> str | None:
+    """Шукає сторінку за url у файлі краулера. JSON розбирається лише для стрічки з цим url."""
+    needle = json.dumps(url, ensure_ascii=False)
+    try:
+        with path.open(encoding="utf-8") as lines:
+            for line in lines:
+                if needle in line:
+                    record = json.loads(line)
+                    if record.get("url") == url:
+                        return str(record["text"])
+    except (OSError, ValueError, KeyError) as exc:
+        log.warning("не можу прочитати %s для сніпета: %s", path, exc)
+    return None
 
 
 def snippet_for(

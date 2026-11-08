@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from collections.abc import Iterator
@@ -58,11 +59,36 @@ def iter_documents(
     з записом у лог.
     """
     root = Path(root)
+    if root.suffix == ".jsonl" and root.is_file():  # результат `findex crawl`
+        yield from iter_jsonl(root)
+        return
     for path in find_paths(root, pattern):
         try:
             yield read_document(path, root, strip)
         except (OSError, UnicodeDecodeError) as exc:
             log.warning("пропускаю %s: %s", path, exc)
+
+
+def iter_jsonl(path: Path) -> Iterator[Document]:
+    """Читає сторінки краулера (по одній JSON-стрічці на сторінку), теж по одній за раз.
+
+    doc_id це url сторінки. Зіпсовані стрічки (обірваний запис, порожній текст) пропускаються
+    з записом у лог.
+    """
+    with path.open(encoding="utf-8") as lines:
+        for number, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+                url, text = record["url"], record["text"]
+                if not isinstance(url, str) or not isinstance(text, str):
+                    raise TypeError("url і text мають бути рядками")
+            except (ValueError, KeyError, TypeError) as exc:  # JSONDecodeError це ValueError
+                log.warning("пропускаю %s:%d: %s", path, number, exc)
+                continue
+            title = record.get("title")
+            yield Document(doc_id=url, path=path, text=text, title=title or url)
 
 
 def read_document(path: Path, root: Path, strip: bool = True) -> Document:

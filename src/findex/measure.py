@@ -38,6 +38,42 @@ def mb(n_bytes: float) -> float:
     return n_bytes / 1024 / 1024
 
 
+def peak_rss_mb() -> float:
+    """Пік оперативної пам'яті поточного процесу, МБ (на Windows це пік робочого набору)."""
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        class Counters(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = Counters()
+        counters.cb = ctypes.sizeof(Counters)
+        kernel32 = ctypes.WinDLL("kernel32")
+        psapi = ctypes.WinDLL("psapi")
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
+        psapi.GetProcessMemoryInfo(
+            kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+        )
+        return mb(counters.PeakWorkingSetSize)
+    import resource
+
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # КБ на Linux, байти на macOS
+    return mb(rss * (1 if sys.platform == "darwin" else 1024))
+
+
 def setup_console() -> None:
     # у windows консоль часто cp1251, а в корпусі є будь-які символи
     for stream in (sys.stdout, sys.stderr):
