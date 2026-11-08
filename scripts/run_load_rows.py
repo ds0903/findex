@@ -15,6 +15,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
 FIRST_PORT = 8221  # кожен рядок на своєму порту: сервер, що не помер, не підмінить наступний
@@ -53,7 +54,7 @@ def wait_health(port: int, timeout: float = 90) -> None:
     raise RuntimeError("сервер не відповів на /health")
 
 
-def load(url: str, concurrency: int, seconds: int) -> dict[str, float]:
+def load(url: str, concurrency: int, seconds: int) -> dict[str, Any]:
     done = subprocess.run(
         [sys.executable, str(REPO / "scripts" / "load_test.py"), url]
         + ["-c", str(concurrency), "-z", str(seconds)],
@@ -77,7 +78,6 @@ def main() -> None:
 
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONPATH=str(REPO / "src"))
     py = sys.executable
-    findex = [py, "-m", "findex", "serve", "--index", str(args.index)]
     base = [py, "-m", "findex", "serve", "--index", str(args.index)]
     base += ["--corpus-root", str(args.corpus)]
     bench = [py, str(REPO / "scripts" / "bench_sync_async.py"), str(args.index), str(args.corpus)]
