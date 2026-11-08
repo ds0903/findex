@@ -72,6 +72,42 @@ def test_index_options(corpus: Path, tmp_path: Path):
     assert "не мірялась" in result.stdout
 
 
+@pytest.mark.parametrize("executor", ["serial", "threads", "processes"])
+def test_index_with_workers_gives_the_same_index(corpus: Path, tmp_path: Path, executor: str):
+    plain = tmp_path / "plain.bin"
+    parallel = tmp_path / "parallel.bin"
+    run("index", corpus, "--out", plain, "--workers", "1", "--no-memory")
+    result = run("index", corpus, "--out", parallel, "--workers", "2", "--executor", executor)
+    assert result.exit_code == 0, result.output
+    assert f"воркери:      2, executor: {executor}" in result.stdout
+    assert "з них злиття" in result.stdout
+    assert plain.read_bytes() == parallel.read_bytes()  # той самий файл байт у байт
+
+
+def test_index_single_worker_runs_without_a_pool(corpus: Path, tmp_path: Path):
+    result = run("index", corpus, "--out", tmp_path / "i.bin", "-w", "1", "--executor", "threads")
+    assert "воркери:      1, executor: serial" in result.stdout
+
+
+def test_index_auto_workers_is_one_for_a_small_corpus(corpus: Path, tmp_path: Path):
+    result = run("index", corpus, "--out", tmp_path / "i.bin", "--no-memory")
+    assert "воркери:      1, executor: serial" in result.stdout
+
+
+def test_index_rejects_bad_executor_and_workers(corpus: Path, tmp_path: Path):
+    out = tmp_path / "i.bin"
+    assert run("index", corpus, "--out", out, "--executor", "gpu").exit_code == 2
+    assert run("index", corpus, "--out", out, "--workers", "0").exit_code == 2
+
+
+def test_index_worker_failure_is_a_clean_error(corpus: Path, tmp_path: Path):
+    (corpus / "bad.txt").write_bytes(b"\xff\xfe\x80 not utf-8")
+    result = run("index", corpus, "--out", tmp_path / "i.bin", "-w", "2", "--executor", "processes")
+    assert result.exit_code == 1
+    assert "bad.txt" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_index_progress_goes_to_stderr_not_stdout(corpus: Path, tmp_path: Path):
     result = run("index", corpus, "--out", tmp_path / "i.bin", "--no-memory")
     assert result.exit_code == 0
