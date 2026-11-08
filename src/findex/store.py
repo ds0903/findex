@@ -14,15 +14,21 @@ import pickle
 import struct
 import sys
 from array import array
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Literal, cast
 
-from findex.index import DocMeta, Index, PlainPosting, Posting
+from findex.index import STORAGES, DocMeta, Entry, Index, PlainPosting, Posting, Storage
+from findex.timing import timed
 
-FORMATS = ("pickle", "binary")
+type Format = Literal["pickle", "binary"]
+FORMATS: tuple[Format, ...] = ("pickle", "binary")
 MAGIC = b"FINDEX02"
 
 
-def save(index: Index, path: Path | str, fmt: str = "pickle") -> None:
+def save(index: Index, path: Path | str, fmt: Format = "pickle") -> None:
     if fmt == "pickle":
         with open(path, "wb") as f:
             pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -32,6 +38,7 @@ def save(index: Index, path: Path | str, fmt: str = "pickle") -> None:
         raise ValueError(f"невідомий формат {fmt!r}, є: {', '.join(FORMATS)}")
 
 
+@timed
 def load(path: Path | str) -> Index:
     """Читає індекс, формат визначає за вмістом файлу (а не за розширенням).
 
@@ -49,24 +56,38 @@ def load(path: Path | str) -> Index:
             return _load_binary(path)
         f.seek(0)
         try:
-            index = pickle.load(f)  # саме тут виконався б чужий код, див. попередження вище
+            obj: object = pickle.load(f)  # саме тут виконався б чужий код, див. вище
         except Exception as exc:
             raise ValueError(f"{path}: це не файл індексу findex") from exc
-    if not isinstance(index, Index):
-        raise ValueError(f"{path}: в pickle лежить не Index, а {type(index).__name__}")
-    return index
+    if not isinstance(obj, Index):
+        raise ValueError(f"{path}: в pickle лежить не Index, а {type(obj).__name__}")
+    return obj
+
+
+@contextmanager
+def open_index(path: Path | str) -> Iterator[Index]:
+    """with open_index(path) as index: ...
+
+    Після виходу з with (і нормального, і через виняток) індекс закривається:
+    його словники очищаються, пам'ять звільняється.
+    """
+    index = load(path)
+    try:
+        yield index
+    finally:
+        index.close()
 
 
 def _save_binary(index: Index, path: Path) -> None:
     terms = sorted(index.postings)
-    counts = array("I")
-    doc_ids = array("I")
-    tfs = array("I")
-    positions = array("I")
+    counts: array[int] = array("I")
+    doc_ids: array[int] = array("I")
+    tfs: array[int] = array("I")
+    positions: array[int] = array("I")
 
     for term in terms:
         entry = index.postings[term]
-        if index.storage == "array":
+        if isinstance(entry, tuple):
             counts.append(len(entry[0]))
             doc_ids.extend(entry[0])
             tfs.extend(entry[1])
@@ -81,6 +102,7 @@ def _save_binary(index: Index, path: Path) -> None:
     header = {
         "storage": index.storage,
         "positions": index.positions,
+        "root": index.root,
         "byteorder": sys.byteorder,
         "itemsize": doc_ids.itemsize,
         "terms": terms,
@@ -99,62 +121,89 @@ def _save_binary(index: Index, path: Path) -> None:
             f.write(arr.tobytes())
 
 
+@dataclass(frozen=True)
+class _Header:
+    storage: Storage
+    positions: bool
+    root: str
+    byteorder: str
+    itemsize: int
+    terms: list[str]
+    docs: list[tuple[int, str, str, int]]
+
+
+def _parse_header(raw: bytes, path: Path) -> _Header:
+    try:
+        data = cast("dict[str, Any]", json.loads(raw))
+        storage = str(data["storage"])
+        if storage not in STORAGES:
+            raise ValueError(storage)
+        return _Header(
+            storage=cast("Storage", storage),
+            positions=bool(data["positions"]),
+            root=str(data.get("root", "")),  # у файлах лаби 2 цього ключа нема
+            byteorder=str(data["byteorder"]),
+            itemsize=int(data["itemsize"]),
+            terms=[str(t) for t in data["terms"]],
+            docs=[(int(d), str(p), str(t), int(n)) for d, p, t, n in data["docs"]],
+        )
+    except (KeyError, ValueError, TypeError) as exc:  # JSONDecodeError теж ValueError
+        raise ValueError(f"{path}: пошкоджений заголовок") from exc
+
+
 def _load_binary(path: Path) -> Index:
     data = memoryview(path.read_bytes())
     start = len(MAGIC)
     try:
         (header_len,) = struct.unpack_from("<I", data, start)
-        start += 4
-        header = json.loads(bytes(data[start : start + header_len]))
-        terms = header["terms"]
-        storage = header["storage"]
-        has_positions = header["positions"]
-        docs = header["docs"]
-        byteorder = header["byteorder"]
-        if header["itemsize"] != array("I").itemsize:
-            raise ValueError("розмір unsigned int на цій машині інший")
-    except (struct.error, KeyError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except struct.error as exc:
         raise ValueError(f"{path}: пошкоджений заголовок") from exc
+    start += 4
+    header = _parse_header(bytes(data[start : start + header_len]), path)
+    if header.itemsize != array("I").itemsize:
+        raise ValueError(f"{path}: розмір unsigned int на цій машині інший")
 
     offset = start + header_len
 
-    def take(n: int) -> array:
+    def take(n: int) -> array[int]:
         nonlocal offset
-        arr = array("I")
+        arr: array[int] = array("I")
         chunk = data[offset : offset + n * arr.itemsize]
         if len(chunk) != n * arr.itemsize:
             raise ValueError(f"{path}: файл обрізаний")
         arr.frombytes(chunk)
-        if byteorder != sys.byteorder:
+        if header.byteorder != sys.byteorder:
             arr.byteswap()
         offset += n * arr.itemsize
         return arr
 
-    counts = take(len(terms))
+    counts = take(len(header.terms))
     total = sum(counts)
     doc_ids = take(total)
     tfs = take(total)
-    positions = take(sum(tfs)) if has_positions else array("I")
+    positions = take(sum(tfs)) if header.positions else array("I")
 
-    posting_cls = PlainPosting if storage == "plain" else Posting
-    postings: dict = {}
+    postings: dict[str, Entry] = {}
     i = 0  # де ми в doc_ids/tfs
     p = 0  # де ми в positions
-    for term, n in zip(terms, counts, strict=True):
-        if storage == "array":
+    for term, n in zip(header.terms, counts, strict=True):
+        if header.storage == "array":
             postings[term] = (doc_ids[i : i + n], tfs[i : i + n])
         else:
-            items = []
+            rows: list[tuple[int, int, tuple[int, ...]]] = []
             for k in range(i, i + n):
                 tf = tfs[k]
-                where = ()
-                if has_positions:
+                where: tuple[int, ...] = ()
+                if header.positions:
                     where = tuple(positions[p : p + tf])
                     p += tf
-                items.append(posting_cls(doc_ids[k], tf, where))
-            postings[term] = items
+                rows.append((doc_ids[k], tf, where))
+            if header.storage == "plain":
+                postings[term] = [PlainPosting(*row) for row in rows]
+            else:
+                postings[term] = [Posting(*row) for row in rows]
         i += n
 
-    doc_meta = {doc_id: DocMeta(doc_path, title) for doc_id, doc_path, title, _ in docs}
-    doc_lengths = {doc_id: length for doc_id, _, _, length in docs}
-    return Index(postings, doc_lengths, doc_meta, storage, has_positions)
+    doc_meta = {doc_id: DocMeta(doc_path, title) for doc_id, doc_path, title, _ in header.docs}
+    doc_lengths = {doc_id: length for doc_id, _, _, length in header.docs}
+    return Index(postings, doc_lengths, doc_meta, header.storage, header.positions, header.root)
