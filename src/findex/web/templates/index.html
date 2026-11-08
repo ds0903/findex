@@ -8,7 +8,7 @@
 {% block content %}
 <section class="search {% if not q %}search--home{% endif %}">
   {% if not q %}
-  <h1>Пошук по <em>59 книгах</em></h1>
+  <h1>Пошук по <em>{{ documents }} книгах</em></h1>
   <p class="lead">Англомовна класика з Project Gutenberg. Працюють оператори <code>AND</code>, <code>OR</code>,
     <code>NOT</code>, дужки та фрази в лапках.</p>
   {% endif %}

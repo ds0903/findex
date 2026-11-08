@@ -233,7 +233,7 @@ def test_settings_come_from_environment(monkeypatch: pytest.MonkeyPatch, tmp_pat
 def test_home_page(page_client: TestClient):
     response = page_client.get("/")
     assert response.status_code == 200 and "text/html" in response.headers["content-type"]
-    assert '<form action="/"' in response.text and "59 книгах" in response.text
+    assert '<form action="/"' in response.text and "2 книгах" in response.text
 
 
 def test_results_page_shows_scores_and_highlights(page_client: TestClient):
