@@ -1,0 +1,45 @@
+загалом з cProfile: 4.15 с
+
+--- за tottime ---
+227716 function calls (227635 primitive calls) in 4.151 seconds
+
+   Ordered by: internal time
+   List reduced from 178 to 14 due to restriction <14>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      100    2.779    0.028    2.843    0.028 snippets.py:36(_find_matches)
+      100    0.562    0.006    0.562    0.006 {method 'search' of 're.Pattern' objects}
+    30760    0.374    0.000    0.374    0.000 {built-in method unicodedata.normalize}
+       50    0.197    0.004    0.241    0.005 {method 'read' of '_io.TextIOWrapper' objects}
+       50    0.051    0.001    0.614    0.012 documents.py:30(strip_boilerplate)
+       50    0.043    0.001    0.043    0.001 {built-in method _codecs.utf_8_decode}
+       50    0.025    0.001    0.036    0.001 snippets.py:52(_best_window)
+    15655    0.015    0.000    0.015    0.000 {method 'translate' of 'str' objects}
+       50    0.013    0.000    0.882    0.018 snippets.py:101(document_text)
+    15355    0.011    0.000    0.021    0.000 tokenizer.py:34(normalize)
+    15295    0.009    0.000    0.045    0.000 tokenizer.py:46(term_of)
+        5    0.007    0.001    4.151    0.830 profile_hotspots.py:34(run_search)
+       50    0.007    0.000    0.009    0.000 {built-in method _io.open}
+47495/47484    0.006    0.000    0.006    0.000 {built-in method builtins.len}
+
+--- за cumulative ---
+227716 function calls (227635 primitive calls) in 4.151 seconds
+
+   Ordered by: cumulative time
+   List reduced from 178 to 14 due to restriction <14>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    4.151    4.151 profile_hotspots.py:61(job)
+        5    0.007    0.001    4.151    0.830 profile_hotspots.py:34(run_search)
+       50    0.002    0.000    4.138    0.083 snippets.py:129(snippet_for)
+       50    0.002    0.000    3.254    0.065 snippets.py:74(make_snippet)
+      100    2.779    0.028    2.843    0.028 snippets.py:36(_find_matches)
+       50    0.013    0.000    0.882    0.018 snippets.py:101(document_text)
+       50    0.051    0.001    0.614    0.012 documents.py:30(strip_boilerplate)
+      100    0.562    0.006    0.562    0.006 {method 'search' of 're.Pattern' objects}
+    30760    0.374    0.000    0.374    0.000 {built-in method unicodedata.normalize}
+       50    0.000    0.000    0.252    0.005 _local.py:539(read_text)
+       50    0.000    0.000    0.252    0.005 _abc.py:628(read_text)
+       50    0.197    0.004    0.241    0.005 {method 'read' of '_io.TextIOWrapper' objects}
+    15295    0.009    0.000    0.045    0.000 tokenizer.py:46(term_of)
+       50    0.000    0.000    0.043    0.001 <frozen codecs>:322(decode)

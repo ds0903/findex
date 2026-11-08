@@ -1,0 +1,45 @@
+загалом з cProfile: 30.50 с
+
+--- за tottime ---
+30973326 function calls (30973182 primitive calls) in 30.497 seconds
+
+   Ordered by: internal time
+   List reduced from 187 to 14 due to restriction <14>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+  9735723   11.510    0.000   23.400    0.000 tokenizer.py:40(tokenize)
+  9735669    8.309    0.000    8.309    0.000 {method 'translate' of 'str' objects}
+       59    4.208    0.071   27.608    0.468 {built-in method _collections._count_elements}
+  9735723    2.467    0.000    2.467    0.000 {method 'group' of 're.Match' objects}
+   585490    0.869    0.000    1.417    0.000 index.py:163(add)
+      178    0.577    0.003    0.577    0.003 {method 'search' of 're.Pattern' objects}
+      118    0.559    0.005    0.559    0.005 {built-in method unicodedata.normalize}
+       59    0.553    0.009    0.553    0.009 {method 'casefold' of 'str' objects}
+   585490    0.429    0.000    0.429    0.000 <string>:2(__init__)
+       59    0.332    0.006    0.394    0.007 {method 'read' of '_io.TextIOWrapper' objects}
+        1    0.235    0.235   30.373   30.373 index.py:207(build_index)
+        1    0.120    0.120   30.497   30.497 profile_hotspots.py:30(run_index)
+   585720    0.119    0.000    0.119    0.000 {method 'append' of 'list' objects}
+       59    0.060    0.001    0.060    0.001 {built-in method _codecs.utf_8_decode}
+
+--- за cumulative ---
+30973326 function calls (30973182 primitive calls) in 30.497 seconds
+
+   Ordered by: cumulative time
+   List reduced from 187 to 14 due to restriction <14>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000   30.497   30.497 profile_hotspots.py:53(job)
+        1    0.120    0.120   30.497   30.497 profile_hotspots.py:30(run_index)
+        1    0.004    0.004   30.377   30.377 timing.py:15(wrapper)
+        1    0.235    0.235   30.373   30.373 index.py:207(build_index)
+      118    0.000    0.000   27.608    0.234 __init__.py:673(update)
+       59    4.208    0.071   27.608    0.468 {built-in method _collections._count_elements}
+  9735723   11.510    0.000   23.400    0.000 tokenizer.py:40(tokenize)
+  9735669    8.309    0.000    8.309    0.000 {method 'translate' of 'str' objects}
+  9735723    2.467    0.000    2.467    0.000 {method 'group' of 're.Match' objects}
+   585490    0.869    0.000    1.417    0.000 index.py:163(add)
+       59    0.001    0.000    1.113    0.019 tokenizer.py:34(normalize)
+       60    0.000    0.000    1.075    0.018 documents.py:49(iter_documents)
+       59    0.018    0.000    1.072    0.018 documents.py:94(read_document)
+       59    0.056    0.001    0.632    0.011 documents.py:30(strip_boilerplate)

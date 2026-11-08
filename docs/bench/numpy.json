@@ -1,0 +1,77 @@
+{
+ "real": {
+  "docs": 59,
+  "postings": 585490,
+  "numpy_build_s": 0.9691659999953117,
+  "rows": [
+   {
+    "query": "частий (the)",
+    "matched": 56,
+    "python_ms": 0.18428478253316946,
+    "numpy_ms": 0.10625776697461069,
+    "speedup": 1.7343182317882007
+   },
+   {
+    "query": "рідкий (harpoon)",
+    "matched": 2,
+    "python_ms": 0.040408617235722026,
+    "numpy_ms": 0.09362988506927301,
+    "speedup": 0.43157819969366945
+   },
+   {
+    "query": "3 терми через OR",
+    "matched": 50,
+    "python_ms": 0.2817274808869449,
+    "numpy_ms": 0.14651096773318828,
+    "speedup": 1.922910518207756
+   }
+  ]
+ },
+ "synthetic": {
+  "docs": 200000,
+  "postings": 5996286,
+  "numpy_build_s": 0.24146299999847542,
+  "rows": [
+   {
+    "query": "частий (w1)",
+    "matched": 200000,
+    "python_ms": 674.5553000073414,
+    "numpy_ms": 25.775049994990695,
+    "speedup": 26.170862913493448
+   },
+   {
+    "query": "рідкий (w8997)",
+    "matched": 20,
+    "python_ms": 0.12816047122676405,
+    "numpy_ms": 0.19561785718126753,
+    "speedup": 0.6551573208779468
+   },
+   {
+    "query": "3 терми через OR",
+    "matched": 200000,
+    "python_ms": 735.9929999947781,
+    "numpy_ms": 104.74979999708012,
+    "speedup": 7.026199572842084
+   }
+  ]
+ },
+ "storage": {
+  "docs": 60000,
+  "postings": 4375670,
+  "load_lab2_s": 0.2830822999967495,
+  "load_npy_full_s": 0.038468400001875125,
+  "load_npy_memmap_s": 0.025309299991931766,
+  "touch_biggest_list_ms": 0.1123129999905359,
+  "lab2_file_bytes": 38379522,
+  "npy_files_bytes": {
+   "doc_ids.npy": 17502808,
+   "doc_lengths.npy": 240128,
+   "meta.json": 1357681,
+   "tfs.npy": 17502808
+  },
+  "doc_ids_int32_bytes": 17502680,
+  "doc_ids_gaps_uint16_bytes": 8831336,
+  "decode_biggest_list_ms": 0.14121776861850605,
+  "biggest_list_len": 60000
+ }
+}
