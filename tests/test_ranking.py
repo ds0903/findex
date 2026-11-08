@@ -97,6 +97,21 @@ def test_check2_twentieth_repetition_adds_almost_nothing_in_bm25():
     assert s(1000) < idf * (scorer.k1 + 1)  # насичення: стеля idf * (k1 + 1)
 
 
+def test_check2_tfidf_saturates_too_but_more_slowly():
+    index = corpus(["x " * 50, "y " * 50, "z z", "w"])
+
+    def gains(scorer: Scorer) -> tuple[float, float]:
+        def s(tf: int) -> float:
+            return scorer.score("x", Posting(0, tf), index)
+
+        return s(2) - s(1), s(20) - s(19)
+
+    tf_first, tf_twentieth = gains(TfIdf())
+    bm_first, bm_twentieth = gains(BM25())
+    assert tf_twentieth < tf_first / 10  # логарифм теж гасить ріст...
+    assert tf_twentieth / tf_first > bm_twentieth / bm_first  # ...але BM25 гасить сильніше
+
+
 def test_check3_short_document_beats_long_one_in_bm25():
     index = corpus(["needle", "needle " + "filler " * 200, "other words here"])
     short = BM25().score("needle", Posting(0, 1), index)
