@@ -10,6 +10,7 @@
 
 import json
 import logging
+import os
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -32,9 +33,10 @@ from rich.table import Table
 from rich.text import Text
 
 from findex.documents import find_paths, iter_documents
-from findex.index import Index, Storage, build_index
+from findex.index import Storage
 from findex.logconfig import setup_logging
 from findex.measure import mb, measure, setup_console
+from findex.parallel import BuildResult, ExecutorName, build_parallel
 from findex.ranking import ScorerName, make_scorer
 from findex.search import Engine
 from findex.searcher import Searcher
@@ -43,6 +45,9 @@ from findex.stats import Stats, collect_stats, collect_stats_eager
 from findex.store import Format, load, open_index, save
 
 log = logging.getLogger(__name__)
+
+# менше за цей розмір корпусу пул процесів не окупається (запуск воркерів ≈ їхня робота)
+AUTO_PARALLEL_BYTES = 5 * 1024 * 1024
 
 app = typer.Typer(
     name="findex",
@@ -114,41 +119,64 @@ def index_command(
     storage: Annotated[Storage, typer.Option("--storage", help="як тримати постінги")] = "slots",
     positions: Annotated[bool, typer.Option("--positions", help="зберігати позиції")] = False,
     limit: Annotated[int | None, typer.Option("--limit", min=1, help="лише перші N")] = None,
+    workers: Annotated[
+        int | None,
+        typer.Option("--workers", "-w", min=1, help="кількість воркерів (за замовч. авто)"),
+    ] = None,
+    executor: Annotated[
+        ExecutorName, typer.Option("--executor", help="чим розпаралелювати")
+    ] = "processes",
     no_memory: Annotated[bool, typer.Option("--no-memory", help="без tracemalloc")] = False,
     verbose: Verbose = 0,
 ) -> None:
-    """Будує індекс з усіх .txt у теці й зберігає його у файл."""
+    """Будує індекс з усіх .txt у теці й зберігає його у файл.
+
+    Воркери: за замовчуванням авто. Для корпусу менше 5 МБ це 1 (пул не окупається),
+    інакше стільки, скільки ядер. З --workers 1 пул не створюється взагалі.
+    """
     setup_console()
     setup_logging(verbose)
 
     with expected_errors():
+        root = root.resolve()
         paths = find_paths(root)
         if not paths:
             raise ValueError(f"у {root} немає .txt файлів")
-        total = len(paths) if limit is None else min(limit, len(paths))
-        log.info("файлів до індексації: %d", total)
+        paths = paths[:limit]
+        if workers is None:
+            big = sum(p.stat().st_size for p in paths) > AUTO_PARALLEL_BYTES
+            workers = min(os.cpu_count() or 1, len(paths)) if big else 1
+        used = "serial" if workers == 1 else executor
+        log.info("файлів до індексації: %d, воркерів: %d, executor: %s", len(paths), workers, used)
 
-        def job() -> tuple[Index, float, float]:
+        def job() -> tuple[BuildResult, float]:
             with _progress() as progress:
-                docs = progress.track(
-                    islice(iter_documents(root), limit), total=total, description="індексація"
+                task = progress.add_task("індексація", total=len(paths))
+                result = build_parallel(
+                    root,
+                    paths,
+                    workers,
+                    used,
+                    storage,
+                    positions,
+                    on_chunk_done=lambda n: progress.advance(task, n),
                 )
-                start = time.perf_counter()
-                index = build_index(docs, storage, positions, root=str(root.resolve()))
-                built = time.perf_counter() - start
             start = time.perf_counter()
-            save(index, out, fmt)
-            return index, built, time.perf_counter() - start
+            save(result.index, out, fmt)
+            return result, time.perf_counter() - start
 
         measured = measure(job, trace_memory=not no_memory)
 
-    index, built, saved = measured.result
+    built, saved = measured.result
+    index = built.index
     log.info("індекс збережено в %s", out)
     typer.echo(f"документів:   {index.num_docs}")
     typer.echo(f"термів:       {len(index)}")
     typer.echo(f"постінгів:    {index.num_postings()}")
     typer.echo(f"сховище:      {index.storage}, позиції: {'так' if index.positions else 'ні'}")
-    typer.echo(f"побудова:     {built:.2f} с")
+    typer.echo(f"воркери:      {workers}, executor: {used}")
+    typer.echo(f"побудова:     {built.build_seconds + built.merge_seconds:.2f} с")
+    typer.echo(f"  з них злиття: {built.merge_seconds:.2f} с")
     typer.echo(f"збереження:   {saved:.2f} с -> {out} ({mb(out.stat().st_size):.1f} МБ, {fmt})")
     if measured.peak_bytes is None:
         typer.echo("пік пам'яті:  не мірялась")
