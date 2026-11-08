@@ -1,0 +1,13 @@
+# Render Blueprint: `New > Blueprint` у панелі Render, репозиторій ds0903/findex.
+# Уся конфігурація це змінні оточення; секретів у сервісі нема.
+services:
+  - type: web
+    name: findex
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: LOG_LEVEL
+        value: INFO
+      - key: WEB_CONCURRENCY
+        value: "1"
