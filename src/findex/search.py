@@ -1,30 +1,31 @@
-"""Булів пошук по інвертованому індексу.
+"""Булів пошук по інвертованому індексу: які документи підходять (без рейтингу).
 
-Запит: `term term` - це AND, також є OR і NOT (великими літерами), обчислюється зліва направо:
+Запит розбирає findex.query (AND, OR, NOT, дужки, "фрази"). Дерево можна виконати
+двома способами (прапорець engine):
 
-    cat dog            cat AND dog
-    cat OR dog         cat або dog
-    cat NOT dog        cat, але без dog
-    NOT cat            усі документи, де cat нема
-    a OR b NOT c       (a OR b) NOT c
+    merge - двовказівниковий прохід по відсортованих спискам, O(len(a) + len(b))
+    set   - через множини Python: швидкий C-код, але треба будувати множини й сортувати
 
-Запуск: python -m findex.search index.bin "query"
+Ранжований пошук зі сніпетами: findex.searcher. Запуск: python -m findex.search index.bin "query"
 """
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Literal
 
 from findex.index import Index
-from findex.tokenizer import tokenize
+from findex.query import And, Node, Not, Or, Phrase, Term, parse
 
-OPERATORS = {"AND", "OR", "NOT"}
+type Engine = Literal["merge", "set"]
+ENGINE_NAMES: tuple[Engine, ...] = ("merge", "set")
 
+type Combine = Callable[[Sequence[int], Sequence[int]], list[int]]
 
-# --- двовказівниковий merge: списки вже відсортовані, тому за один прохід, O(len(a) + len(b)) ---
+# --- двовказівниковий merge: списки вже відсортовані, тому за один прохід ---
 
 
 def merge_and(a: Sequence[int], b: Sequence[int]) -> list[int]:
-    out = []
+    out: list[int] = []
     i = j = 0
     na, nb = len(a), len(b)
     while i < na and j < nb:
@@ -41,7 +42,7 @@ def merge_and(a: Sequence[int], b: Sequence[int]) -> list[int]:
 
 
 def merge_or(a: Sequence[int], b: Sequence[int]) -> list[int]:
-    out = []
+    out: list[int] = []
     i = j = 0
     na, nb = len(a), len(b)
     while i < na and j < nb:
@@ -63,7 +64,7 @@ def merge_or(a: Sequence[int], b: Sequence[int]) -> list[int]:
 
 def merge_diff(a: Sequence[int], b: Sequence[int]) -> list[int]:
     """Елементи a, яких нема в b."""
-    out = []
+    out: list[int] = []
     i = j = 0
     na, nb = len(a), len(b)
     while i < na and j < nb:
@@ -95,45 +96,43 @@ def set_diff(a: Sequence[int], b: Sequence[int]) -> list[int]:
     return sorted(set(a) - set(b))
 
 
-ENGINES = {
+ENGINES: dict[Engine, tuple[Combine, Combine, Combine]] = {
     "merge": (merge_and, merge_or, merge_diff),
     "set": (set_and, set_or, set_diff),
 }
 
 
-def search(index: Index, query: str, engine: str = "merge") -> list[int]:
-    """Повертає відсортований список doc_id, що задовольняють запит."""
+def evaluate_ids(index: Index, node: Node, engine: Engine = "merge") -> list[int]:
+    """Відсортований список doc_id, що задовольняють дерево запиту."""
     if engine not in ENGINES:
-        raise ValueError(f"невідомий engine {engine!r}, є: {', '.join(ENGINES)}")
+        raise ValueError(f"невідомий engine {engine!r}, є: {', '.join(ENGINE_NAMES)}")
     and_, or_, diff = ENGINES[engine]
-    everything = index.all_doc_ids()
 
-    result: Sequence[int] | None = None
-    op = "AND"
-    negate = False
-    for word in query.split():
-        if word in OPERATORS:
-            if word == "NOT":
-                negate = True
-            else:
-                op = word
-            continue
-        # одне слово запиту може дати кілька термів ("foo.bar"), вони йдуть як AND
-        for term in tokenize(word):
-            ids = index.doc_ids(term)
-            if result is None:
-                result = diff(everything, ids) if negate else ids
-            elif negate:
-                result = diff(result, ids) if op == "AND" else or_(result, diff(everything, ids))
-            else:
-                result = and_(result, ids) if op == "AND" else or_(result, ids)
-            op, negate = "AND", False
+    def go(n: Node) -> Sequence[int]:
+        match n:
+            case Term(text):
+                return index.doc_ids(text)
+            case Phrase():
+                return sorted(n.evaluate(index))
+            case And(left, right):
+                return and_(go(left), go(right))
+            case Or(left, right):
+                return or_(go(left), go(right))
+            case Not(operand):
+                return diff(index.all_doc_ids(), go(operand))
+            case _:
+                raise TypeError(f"невідомий вузол запиту: {n!r}")
 
-    return list(result) if result else []
+    return list(go(node))
+
+
+def search(index: Index, query: str, engine: Engine = "merge") -> list[int]:
+    """Розбирає запит і повертає відсортований список doc_id (без рейтингу)."""
+    return evaluate_ids(index, parse(query), engine)
 
 
 if __name__ == "__main__":
-    # див. пояснення в index.py: CLI тримаємо в commands.py
+    # див. пояснення в index.py: CLI тримаємо в окремому модулі
     from findex.commands import search_main
 
     sys.exit(search_main())

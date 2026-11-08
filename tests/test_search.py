@@ -3,6 +3,7 @@ import random
 import pytest
 
 from findex.index import STORAGES, build_index
+from findex.query import QueryError
 from findex.search import (
     ENGINES,
     merge_and,
@@ -24,21 +25,23 @@ QUERIES = [
     ("cat dog", [2]),  # неявний AND
     ("cat AND dog", [2]),
     ("cat OR dog", [0, 1, 2]),
-    ("cat NOT dog", [0]),
+    ("cat NOT dog", [0]),  # cat AND (NOT dog)
     ("NOT cat", [1]),
-    ("the OR dog NOT sat", [2]),  # зліва направо: (the OR dog) NOT sat
+    ("NOT NOT cat", [0, 2]),
+    ("the OR dog NOT sat", [0, 1, 2]),  # the OR (dog AND NOT sat): AND сильніший за OR
+    ("(the OR dog) NOT sat", [2]),  # дужки змінюють порядок
     ("a OR NOT cat", [1, 2]),
     ("sat NOT the", []),
+    ("cat AND NOT dog OR the mat", [0]),
     ("CAT Dog", [2]),  # терми нормалізуються як і в токенізаторі
-    ("cat OR", [0, 2]),  # операція без правого операнда ігнорується
     ("unknown", []),
     ("cat unknown", []),
     ("cat OR unknown", [0, 2]),
-    ("", []),
-    ("   ", []),
-    ("OR AND NOT", []),
     ("cat or dog", []),  # оператори тільки великими літерами, "or" тут звичайний терм
+    ("cat - dog", [2]),  # слово з самої пунктуації пропускається
 ]
+
+BAD_QUERIES = ["", "   ", "OR AND NOT", "cat OR", "(cat", "cat)", '"cat', "()", "AND cat", 'cat ""']
 
 
 @pytest.fixture(params=STORAGES)
@@ -52,9 +55,20 @@ def test_queries(index, engine, query, expected):
     assert search(index, query, engine) == expected
 
 
+@pytest.mark.parametrize("query", BAD_QUERIES)
+def test_bad_queries_raise_query_error(index, query):
+    with pytest.raises(QueryError):
+        search(index, query)
+
+
 def test_unknown_engine(index):
     with pytest.raises(ValueError):
-        search(index, "cat", engine="magic")
+        search(index, "cat", engine="magic")  # type: ignore[arg-type]  # навмисно поганий engine
+
+
+def test_phrase_needs_positions(index):
+    with pytest.raises(QueryError, match="позиц"):
+        search(index, '"the cat"')
 
 
 def test_search_does_not_modify_index(index):
