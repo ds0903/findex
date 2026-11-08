@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{% if q %}{{ q }} — findex{% else %}findex — пошук по книгах{% endif %}{% endblock %}
+
+{% macro page_url(n) -%}
+/?q={{ q | urlencode }}&scorer={{ scorer }}&k={{ k }}&page={{ n }}
+{%- endmacro %}
+
+{% block content %}
+<section class="search {% if not q %}search--home{% endif %}">
+  {% if not q %}
+  <h1>Пошук по <em>59 книгах</em></h1>
+  <p class="lead">Англомовна класика з Project Gutenberg. Працюють оператори <code>AND</code>, <code>OR</code>,
+    <code>NOT</code>, дужки та фрази в лапках.</p>
+  {% endif %}
+  <form action="/" method="get" role="search">
+    <input type="search" name="q" value="{{ q }}" placeholder="whale AND &quot;white sea&quot;"
+           autocomplete="off" autofocus maxlength="200" aria-label="Запит">
+    <button type="submit">Шукати</button>
+    <details>
+      <summary>Параметри</summary>
+      <label>Формула
+        <select name="scorer">
+          {% for s in scorers %}<option value="{{ s }}" {% if s == scorer %}selected{% endif %}>{{ s | upper }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>На сторінці
+        <select name="k">
+          {% for n in (5, 10, 20, 50) %}<option value="{{ n }}" {% if n == k %}selected{% endif %}>{{ n }}</option>{% endfor %}
+        </select>
+      </label>
+    </details>
+  </form>
+  {% if not q %}
+  <p class="examples">Спробуйте:
+    <a href="/?q=whale">whale</a>
+    <a href="/?q=%22white+whale%22">"white whale"</a>
+    <a href="/?q=love+AND+death+NOT+war">love AND death NOT war</a>
+    <a href="/?q=%28ship+OR+sea%29+AND+storm">(ship OR sea) AND storm</a>
+  </p>
+  {% endif %}
+</section>
+
+{% if not ready %}
+<p class="notice">Індекс ще завантажується. Оновіть сторінку за хвилину.</p>
+{% endif %}
+
+{% if error %}
+<p class="notice notice--error" role="alert">{{ error }}</p>
+{% endif %}
+
+{% if response %}
+<section class="results">
+  <p class="summary">
+    {% if response.total == 0 %}Нічого не знайдено за запитом <strong>{{ response.query }}</strong>.
+    {% else %}Знайдено документів: <strong>{{ response.total }}</strong>
+      <span class="muted">· {{ response.took_ms }} мс · {{ response.scorer | upper }}</span>{% endif %}
+  </p>
+  <ol start="{{ (response.page - 1) * response.k + 1 }}">
+    {% for r in response.results %}
+    <li class="hit">
+      <h2><a href="/view/{{ r.doc_id }}?q={{ q | urlencode }}">{{ r.title }}</a>
+        <span class="score" title="рейтинг {{ response.scorer }}">{{ '%.2f' | format(r.score) }}</span></h2>
+      <p class="path">{{ r.path }}</p>
+      {% if r.snippet %}<p class="snippet">{{ mark(r.snippet, r.highlights) }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+
+  {% if response.pages > 1 %}
+  <nav class="pager" aria-label="Сторінки результатів">
+    {% if response.page > 1 %}<a href="{{ page_url(response.page - 1) }}" rel="prev">← Назад</a>{% endif %}
+    {% for n in window %}
+      {% if not loop.first and n - window[loop.index0 - 1] > 1 %}<span class="gap">…</span>{% endif %}
+      {% if n == response.page %}<span class="current" aria-current="page">{{ n }}</span>
+      {% else %}<a href="{{ page_url(n) }}">{{ n }}</a>{% endif %}
+    {% endfor %}
+    {% if response.page < response.pages %}<a href="{{ page_url(response.page + 1) }}" rel="next">Далі →</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — findex{% endblock %}
+
+{% macro part_url(n) -%}
+/view/{{ doc_id }}?part={{ n }}{% if q %}&q={{ q | urlencode }}{% endif %}
+{%- endmacro %}
+
+{% block content %}
+<article class="doc">
+  <p class="back"><a href="{% if q %}/?q={{ q | urlencode }}{% else %}/{% endif %}">← до результатів</a></p>
+  <h1>{{ title }}</h1>
+  <p class="path">{{ path }} · {{ tokens }} токенів · частина {{ part }} з {{ parts }}</p>
+  <div class="text">{{ mark(chunk, spans) }}</div>
+  {% if parts > 1 %}
+  <nav class="pager">
+    {% if part > 1 %}<a href="{{ part_url(part - 1) }}" rel="prev">← Попередня</a>{% endif %}
+    {% if part < parts %}<a href="{{ part_url(part + 1) }}" rel="next">Наступна →</a>{% endif %}
+  </nav>
+  {% endif %}
+</article>
+{% endblock %}
