@@ -12,5 +12,8 @@ dist/
 # інструменти
 .pytest_cache/
 .ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
 .idea/
 .vscode/

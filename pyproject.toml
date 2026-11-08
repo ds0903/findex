@@ -1,16 +1,33 @@
 [project]
 name = "findex"
-version = "0.1.0"
-description = "Пошукова система на Python (лабораторні курсу), лаба 1: ітератори та корпус"
+version = "0.4.0"
+description = "Пошукова система на Python: інвертований індекс, BM25, мова запитів, CLI"
 readme = "README.md"
 authors = [
     { name = "Danil", email = "danil.grey15@gmail.com" }
 ]
+keywords = ["search", "inverted-index", "bm25", "tf-idf", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Indexing",
+    "Typing :: Typed",
+]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "rich>=15.0.0",
+    "typer>=0.28.0",
+]
+
+[project.urls]
+Repository = "https://github.com/ds0903/findex"
+Issues = "https://github.com/ds0903/findex/issues"
 
 [project.scripts]
-findex = "findex.cli:main"
+findex = "findex.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]
@@ -18,12 +35,27 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.170.15",
+    "pyright>=1.1.414",
     "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.17.3",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: повільні тести (великі вхідні дані, багато прикладів Hypothesis); без них: pytest -m 'not slow'",
+]
+
+[tool.coverage.run]
+source = ["findex"]
+branch = true
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 line-length = 100
@@ -31,3 +63,11 @@ src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.pyright]
+include = ["src", "scripts", "tests"]
+# strict для коду пакета; скрипти для бенчмарків і тести перевіряються у звичайному режимі
+strict = ["src"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
