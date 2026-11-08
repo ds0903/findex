@@ -81,3 +81,11 @@ def test_underscore_separates_words():
 
 def test_punctuation_only_between_words():
     assert toks("Hello,world;foo.bar") == ["hello", "world", "foo", "bar"]
+
+
+@pytest.mark.parametrize("text", ["ʼ", "ʼʼ", "ʼ ʼ", "ʼabc", "abcʼ", "ʼ-ʼ"])
+def test_lone_modifier_apostrophe_is_not_a_token(text):
+    # регресія: Hypothesis знайшов, що самотній ʼ (U+02BC, "буква" для regex) ставав токеном "'"
+    assert all(t.strip("'") for t in toks(text))
+    assert toks("ʼ") == []
+    assert toks("м\u02bcясо") == ["м'ясо"]
