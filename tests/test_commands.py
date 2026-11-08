@@ -19,6 +19,14 @@ def corpus(tmp_path):
     return root
 
 
+@pytest.fixture
+def built(corpus, tmp_path, capsys):
+    out = tmp_path / "index.bin"
+    assert index_main([str(corpus), "--out", str(out), "--no-memory", "--positions"]) == 0
+    capsys.readouterr()
+    return out
+
+
 @pytest.mark.parametrize("fmt", ["binary", "pickle"])
 def test_build_then_search(corpus, tmp_path, capsys, fmt):
     out = tmp_path / "index.bin"
@@ -35,6 +43,68 @@ def test_build_then_search(corpus, tmp_path, capsys, fmt):
     assert "Whale Book" not in found
     assert "пошук:" in found
     assert "пік пам'яті" in found
+
+
+def test_results_have_scores_and_highlighted_snippets(built, capsys):
+    assert search_main([str(built), "whale", "--no-memory"]) == 0
+    out = capsys.readouterr().out
+    assert "  1." in out
+    assert "Whale Book  (a.txt)" in out
+    assert "the white **whale** swims" in out
+
+
+def test_no_snippets_flag(built, capsys):
+    assert search_main([str(built), "whale", "--no-snippets", "--no-memory"]) == 0
+    assert "**" not in capsys.readouterr().out
+
+
+def test_phrase_and_parentheses(built, capsys):
+    # "the sea" є в обох книгах, тож дужки з ship/whale вирішують лише з NOT
+    assert search_main([str(built), '"the sea" AND (ship OR whale)', "--no-memory"]) == 0
+    assert "знайдено документів: 2" in capsys.readouterr().out
+
+    query = '"the sea" AND (ship OR whale) NOT whale'
+    assert search_main([str(built), query, "--no-memory"]) == 0
+    out = capsys.readouterr().out
+    assert "знайдено документів: 1" in out
+    assert "Ship Book" in out and "Whale Book" not in out
+
+
+def test_scorer_and_engine_options(built, capsys):
+    for scorer in ("bm25", "tfidf"):
+        for engine in ("merge", "set"):
+            argv = [str(built), "sea", "--scorer", scorer, "--engine", engine, "--no-memory"]
+            assert search_main(argv) == 0
+            assert f"scorer: {scorer}, engine: {engine}" in capsys.readouterr().out
+
+
+def test_k_limits_shown_results(built, capsys):
+    assert search_main([str(built), "sea", "-k", "1", "--no-memory", "--no-snippets"]) == 0
+    out = capsys.readouterr().out
+    assert "знайдено документів: 2" in out
+    assert "  1." in out and "  2." not in out
+
+
+def test_verbose_shows_timing_and_cache_hit_in_stderr(built, capsys):
+    argv = [str(built), "sea", "--repeat", "2", "-vv", "--no-memory"]
+    assert search_main(argv) == 0
+    err = capsys.readouterr().err
+    assert "Searcher.search:" in err
+    assert "cache hit: 'sea'" in err
+    assert "load:" in err
+
+
+def test_without_verbose_stderr_is_quiet(built, capsys):
+    assert search_main([str(built), "sea", "--repeat", "2", "--no-memory"]) == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_bad_query_is_one_line_error(built, capsys):
+    assert search_main([str(built), "(sea", "--no-memory"]) == 1
+    captured = capsys.readouterr()
+    assert captured.err.startswith("помилка:")
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
 
 
 def test_search_with_set_engine_and_no_memory(corpus, tmp_path, capsys):
