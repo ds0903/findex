@@ -1,6 +1,6 @@
 [project]
 name = "findex"
-version = "0.7.0"
+version = "1.0.0"
 description = "Пошукова система на Python: індекс, BM25, мова запитів, CLI, краулер, веб-API"
 readme = "README.md"
 authors = [
