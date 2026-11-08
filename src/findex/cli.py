@@ -8,19 +8,22 @@
   і ненульовий код виходу, без traceback.
 """
 
+import asyncio
 import json
 import logging
 import os
 import time
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import aclosing, contextmanager
 from importlib.metadata import PackageNotFoundError, version
 from itertools import islice
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich.console import Console
+from rich.live import Live
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -32,10 +35,11 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
+from findex.crawl import CrawlConfig, CrawlStats, FetchConfig, crawl, default_user_agent
 from findex.documents import find_paths, iter_documents
-from findex.index import Storage
+from findex.index import Storage, build_index
 from findex.logconfig import setup_logging
-from findex.measure import mb, measure, setup_console
+from findex.measure import mb, measure, peak_rss_mb, setup_console
 from findex.parallel import BuildResult, ExecutorName, build_parallel
 from findex.ranking import ScorerName, make_scorer
 from findex.search import Engine
@@ -113,7 +117,7 @@ def _progress() -> Progress:
 
 @app.command("index")
 def index_command(
-    root: Annotated[Path, typer.Argument(help="тека з .txt файлами")],
+    root: Annotated[Path, typer.Argument(help="тека з .txt файлами або .jsonl від `findex crawl`")],
     out: Annotated[Path, typer.Option("--out", "-o", help="куди зберегти індекс")],
     fmt: Annotated[Format, typer.Option("--format", help="формат файлу")] = "binary",
     storage: Annotated[Storage, typer.Option("--storage", help="як тримати постінги")] = "slots",
@@ -133,34 +137,43 @@ def index_command(
 
     Воркери: за замовчуванням авто. Для корпусу менше 5 МБ це 1 (пул не окупається),
     інакше стільки, скільки ядер. З --workers 1 пул не створюється взагалі.
+    Файл .jsonl (результат `findex crawl`) індексується в один потік: його не розбити на шматки.
     """
     setup_console()
     setup_logging(verbose)
 
     with expected_errors():
         root = root.resolve()
-        paths = find_paths(root)
-        if not paths:
+        from_crawl = root.suffix == ".jsonl" and root.is_file()
+        paths = [] if from_crawl else find_paths(root)
+        if not paths and not from_crawl:
             raise ValueError(f"у {root} немає .txt файлів")
         paths = paths[:limit]
         if workers is None:
             big = sum(p.stat().st_size for p in paths) > AUTO_PARALLEL_BYTES
             workers = min(os.cpu_count() or 1, len(paths)) if big else 1
-        used = "serial" if workers == 1 else executor
+        used = "serial" if workers == 1 or from_crawl else executor
+        workers = 1 if from_crawl else workers
         log.info("файлів до індексації: %d, воркерів: %d, executor: %s", len(paths), workers, used)
 
         def job() -> tuple[BuildResult, float]:
             with _progress() as progress:
-                task = progress.add_task("індексація", total=len(paths))
-                result = build_parallel(
-                    root,
-                    paths,
-                    workers,
-                    used,
-                    storage,
-                    positions,
-                    on_chunk_done=lambda n: progress.advance(task, n),
-                )
+                task = progress.add_task("індексація", total=len(paths) or None)
+                if from_crawl:
+                    began = time.perf_counter()
+                    pages = islice(iter_documents(root), limit)
+                    built = build_index(pages, storage, positions, root=str(root))
+                    result = BuildResult(built, time.perf_counter() - began, 0.0, 0.0)
+                else:
+                    result = build_parallel(
+                        root,
+                        paths,
+                        workers,
+                        used,
+                        storage,
+                        positions,
+                        on_chunk_done=lambda n: progress.advance(task, n),
+                    )
             start = time.perf_counter()
             save(result.index, out, fmt)
             return result, time.perf_counter() - start
@@ -184,6 +197,160 @@ def index_command(
         typer.echo(
             f"пік пам'яті:  {mb(measured.peak_bytes):.1f} МБ (tracemalloc, тому час більший)"
         )
+
+
+# --- findex crawl ---
+
+# у тестах сюди підставляють MockTransport; у роботі лишається None, тобто справжня мережа
+_TRANSPORT: httpx.AsyncBaseTransport | None = None
+
+
+class _SlowCallbackCounter(logging.Handler):
+    """Режим debug в asyncio пише попередження, якщо задача надовго зайняла цикл подій."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        message = record.getMessage()
+        if " took " in message:  # "Executing <Task ...> took 0.153 seconds"
+            self.messages.append(message)
+
+
+def _crawl_view(stats: CrawlStats, max_pages: int) -> Table:
+    table = Table(show_header=True, header_style="bold")
+    for name in ("зібрано", "стор/с", "чекають відповіді", "помилок", "повторів", "у черзі", "МБ"):
+        table.add_column(name, justify="right")
+    table.add_row(
+        f"{stats.pages}/{max_pages}",
+        f"{stats.pages_per_second:.1f}",
+        str(stats.in_flight),
+        str(stats.errors),
+        str(stats.retries),
+        str(stats.queued),
+        f"{mb(stats.nbytes):.1f}",
+    )
+    return table
+
+
+async def _crawl_to_file(
+    urls: list[str], config: CrawlConfig, out: Path, stats: CrawlStats
+) -> None:
+    with out.open("w", encoding="utf-8") as sink:
+        # aclosing: при помилці запису генератор закриється, воркери скасуються
+        async with aclosing(crawl(urls, config, stats=stats, transport=_TRANSPORT)) as pages:
+            async for page in pages:
+                sink.write(page.to_json() + "\n")  # сторінка пишеться й забувається
+                sink.flush()
+
+
+@app.command("crawl")
+def crawl_command(
+    urls: Annotated[list[str], typer.Argument(help="початкові адреси (http/https)")],
+    out: Annotated[Path, typer.Option("--out", "-o", help="куди писати JSON lines")] = Path(
+        "pages.jsonl"
+    ),
+    max_pages: Annotated[int, typer.Option("--max-pages", min=1, help="стеля на адреси")] = 100,
+    concurrency: Annotated[
+        int, typer.Option("--concurrency", "-c", min=1, help="запитів одночасно")
+    ] = 5,
+    per_host: Annotated[int, typer.Option("--per-host", min=1, help="з них до одного хоста")] = 2,
+    delay: Annotated[
+        float, typer.Option("--delay", min=0, help="пауза між запитами до хоста, с")
+    ] = 0.5,
+    max_depth: Annotated[int, typer.Option("--max-depth", min=0, help="глибина від старту")] = 10,
+    allow_host: Annotated[
+        list[str] | None,
+        typer.Option("--allow-host", help="ще один дозволений хост (host[:port]); можна кілька"),
+    ] = None,
+    timeout: Annotated[float, typer.Option("--timeout", min=0.1, help="секунд на запит")] = 10.0,
+    user_agent: Annotated[
+        str | None, typer.Option("--user-agent", help="за замовч. findex-crawler/версія (+адреса)")
+    ] = None,
+    log_file: Annotated[Path, typer.Option("--log", help="статус кожного URL")] = Path("crawl.log"),
+    stats_json: Annotated[
+        Path | None, typer.Option("--stats-json", help="підсумок у JSON (для бенчмарків)")
+    ] = None,
+    debug: Annotated[
+        bool, typer.Option("--debug", help="asyncio debug: показати, чи хтось блокував цикл")
+    ] = False,
+    verbose: Verbose = 0,
+) -> None:
+    """Обходить сайт і пише сторінки у JSON lines. Поважає robots.txt і не виходить за хости.
+
+    Обходьте лише те, що вам дозволено: свій сайт, документацію з відкритим robots.txt,
+    локальне дзеркало. Результат читає `findex index pages.jsonl`.
+    """
+    setup_console()
+    setup_logging(verbose)
+
+    with expected_errors():
+        config = CrawlConfig(
+            max_pages=max_pages,
+            concurrency=concurrency,
+            per_host=per_host,
+            min_delay=delay,
+            max_depth=max_depth,
+            allowed_hosts=frozenset(allow_host or []),
+            user_agent=user_agent or default_user_agent(),
+            fetch=FetchConfig(timeout=timeout),
+        )
+        stats = CrawlStats()
+        slow = _SlowCallbackCounter()
+
+        # статус кожного URL і всі повтори йдуть у crawl.log; на екран лише за -v
+        file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(message)s"))
+        watched = [logging.getLogger("findex.crawl"), logging.getLogger("asyncio")]
+        saved = [(lg, lg.level, lg.propagate) for lg in watched]
+        for lg in watched:
+            lg.addHandler(file_handler)
+            lg.setLevel(min(lg.getEffectiveLevel(), logging.INFO))
+            lg.propagate = verbose > 0  # інакше рядки логу псували б живу таблицю
+        logging.getLogger("asyncio").addHandler(slow)
+        try:
+            console = Console(stderr=True)
+            view = Live(
+                get_renderable=lambda: _crawl_view(stats, max_pages),
+                console=console,
+                refresh_per_second=4,
+            )
+            with view:
+                asyncio.run(_crawl_to_file(urls, config, out, stats), debug=debug)
+        finally:
+            for lg, level, propagate in saved:
+                lg.removeHandler(file_handler)
+                lg.setLevel(level)
+                lg.propagate = propagate
+            logging.getLogger("asyncio").removeHandler(slow)
+            file_handler.close()
+
+    elapsed = stats.elapsed
+    summary: dict[str, object] = {
+        "pages": stats.pages,
+        "errors": stats.errors,
+        "retries": stats.retries,
+        "robots_blocked": stats.robots_blocked,
+        "bytes": stats.nbytes,
+        "seconds": round(elapsed, 3),
+        "pages_per_second": round(stats.pages / elapsed, 2) if elapsed > 0 else 0.0,
+        "peak_rss_mb": round(peak_rss_mb(), 1),
+        "slow_callbacks": len(slow.messages) if debug else None,
+    }
+    if stats_json is not None:
+        stats_json.write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
+    typer.echo(f"сторінок:     {stats.pages} -> {out}")
+    typer.echo(f"помилок:      {stats.errors}, повторів: {stats.retries}")
+    typer.echo(f"robots.txt:   пропущено адрес: {stats.robots_blocked}")
+    typer.echo(f"завантажено:  {mb(stats.nbytes):.1f} МБ за {elapsed:.2f} с")
+    typer.echo(f"швидкість:    {summary['pages_per_second']} сторінок/с")
+    typer.echo(f"пік пам'яті:  {summary['peak_rss_mb']} МБ (RSS)")
+    typer.echo(f"журнал:       {log_file}")
+    if debug:
+        typer.echo(f"asyncio debug: повільних колбеків (>100 мс): {len(slow.messages)}")
+        for message in slow.messages[:5]:
+            typer.echo(f"  {message}", err=True)
 
 
 # --- findex search ---
