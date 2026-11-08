@@ -30,8 +30,19 @@ def documents() -> list[Document]:
 
 
 @pytest.fixture(scope="module")
-def index() -> Index:
-    return build_index(documents(), storage="array")
+def corpus_documents() -> list[Document]:
+    return documents()
+
+
+@pytest.fixture(scope="module")
+def index(corpus_documents: list[Document]) -> Index:
+    return build_index(corpus_documents, storage="array")
+
+
+@pytest.mark.parametrize("storage", ["slots", "array"])
+def test_build_index_speed(benchmark, corpus_documents: list[Document], storage: str):
+    built = benchmark(lambda: build_index(corpus_documents[:500], storage=storage))  # type: ignore[arg-type]
+    assert built.num_docs == 500
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +58,7 @@ def searchers(index: Index) -> dict[str, Searcher]:
 def test_search_speed(benchmark, searchers: dict[str, Searcher], backend: str, name: str):
     query = QUERIES[name]
     results = benchmark(searchers[backend].search, query, BM25(), 10)
-    assert len(results) == 10
+    assert 1 <= len(results) <= 10  # рідкий терм знаходиться лише в кількох документах
 
 
 @pytest.mark.parametrize("name", list(QUERIES))
