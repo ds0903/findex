@@ -39,3 +39,8 @@ def tokenize(text: str) -> Iterator[str]:
     """Віддає токени з тексту по одному (генератор, нічого не збирає в список)."""
     for match in _TOKEN.finditer(normalize(text)):
         yield match.group().translate(_UNIFY)
+
+
+def term_of(word: str) -> str:
+    """Приводить одне слово з тексту до вигляду терма (так само, як tokenize)."""
+    return normalize(word).translate(_UNIFY)
